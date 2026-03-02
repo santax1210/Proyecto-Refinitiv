@@ -3,7 +3,7 @@ import FileUploader from '../components/FileUploader';
 
 const TEAL = '#299D91';
 const BORDER = '#DDE3E6';
-const CLASIFICACIONES = ['CSV', 'Excel (XLSX)', 'Excel (XLS)'];
+const CLASIFICACIONES = ['Moneda', 'Región', 'Industria'];
 
 export default function InicioPage() {
     const [clasificacion, setClasificacion] = useState('');
@@ -50,16 +50,16 @@ export default function InicioPage() {
                             Validación de Allocations
                         </h1>
                         <p style={{ margin: '12px 0 0', fontSize: 13, color: 'rgba(255,255,255,0.75)', lineHeight: 1.6 }}>
-                            Cargá el archivo de distribuciones y ejecutá el proceso de validación automatizado.
+                            Cargá los archivos de allocations y ejecutá el proceso de validación automatizado.
                         </p>
                     </div>
 
                     {/* Stats decorativos */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                         {[
-                            { label: 'Formatos soportados', value: 'CSV · XLSX · XLS' },
-                            { label: 'Tamaño máximo', value: '50 MB' },
                             { label: 'Procesamiento', value: 'Automático' },
+                            { label: 'Seguridad', value: 'Encriptado' },
+                            { label: 'Reportes', value: 'Tiempo Real' },
                         ].map(item => (
                             <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.12)' }}>
                                 <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)' }}>{item.label}</span>
@@ -85,7 +85,7 @@ export default function InicioPage() {
                     {/* Clasificación con chips */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
                         <label style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#71717A' }}>
-                            Formato del Archivo
+                            TIPO DE CLASIFICACION
                         </label>
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                             {CLASIFICACIONES.map(c => {

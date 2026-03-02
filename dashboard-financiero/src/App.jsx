@@ -35,12 +35,12 @@ function OverviewPage() {
 }
 
 /* ── Layout principal con centros y scroll único ── */
-function MainContent({ activePage }) {
+function MainContent({ activePage, onNavigate, selectedId, onSelect }) {
   const renderPage = () => {
     switch (activePage) {
       case 'inicio': return <InicioPage />;
-      case 'validacion': return <ValidacionPage />;
-      case 'visualizacion': return <VisualizacionPage />;
+      case 'validacion': return <ValidacionPage onNavigate={onNavigate} onSelect={onSelect} />;
+      case 'visualizacion': return <VisualizacionPage selectedId={selectedId} onSelect={onSelect} />;
       case 'ajustes': return <PlaceholderPage name="Ajustes" />;
       default: return <InicioPage />;
     }
@@ -60,11 +60,17 @@ function MainContent({ activePage }) {
 
 export default function App() {
   const [activePage, setActivePage] = useState('inicio');
+  const [selectedInstrumentId, setSelectedInstrumentId] = useState(23);
 
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar activePage={activePage} onNavigate={setActivePage} />
-      <MainContent activePage={activePage} />
+      <MainContent
+        activePage={activePage}
+        onNavigate={setActivePage}
+        selectedId={selectedInstrumentId}
+        onSelect={setSelectedInstrumentId}
+      />
     </div>
   );
 }

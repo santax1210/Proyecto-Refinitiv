@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 /* ══════════════════════════════════════════════
    CATÁLOGO DE INSTRUMENTOS
@@ -71,6 +71,16 @@ const CCY_COLORS = {
     'Balanceado': SLATE, 'Otros': '#94A3B8',
 };
 const getCCYColor = (m) => CCY_COLORS[m] || SLATE;
+
+function ExternalLinkIcon() {
+    return (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+            <polyline points="15 3 21 3 21 9" />
+            <line x1="10" y1="14" x2="21" y2="3" />
+        </svg>
+    );
+}
 
 /* ══════════════════════════════════════════════
    MetricCard — ultra-compacta (horizontal layout)
@@ -232,9 +242,28 @@ function SectionCard({ title, children }) {
 /* ══════════════════════════════════════════════
    PÁGINA PRINCIPAL
 ══════════════════════════════════════════════ */
-export default function VisualizacionPage() {
-    const [selectedId, setSelectedId] = useState(INSTRUMENTOS[0].id);
-    const inst = INSTRUMENTOS.find(i => i.id === selectedId);
+export default function VisualizacionPage({ selectedId: propId, onSelect }) {
+    const [selectedId, setSelectedId] = useState(propId || INSTRUMENTOS[0].id);
+    const [searchId, setSearchId] = useState('');
+
+    // Sincronizar con selección externa (desde la tabla)
+    useEffect(() => {
+        if (propId && propId !== selectedId) {
+            setSelectedId(propId);
+            setSearchId('');
+        }
+    }, [propId]);
+
+    const inst = INSTRUMENTOS.find(i => i.id === selectedId) || INSTRUMENTOS[0];
+
+    const handleSearch = (val) => {
+        setSearchId(val);
+        const match = INSTRUMENTOS.find(i => String(i.id) === val);
+        if (match) {
+            setSelectedId(match.id);
+            onSelect?.(match.id);
+        }
+    };
 
     const delta = (inst.pct_escalado - inst.pct_original).toFixed(2);
     const isUp = parseFloat(delta) >= 0;
@@ -256,14 +285,50 @@ export default function VisualizacionPage() {
                     <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#9F9F9F', margin: 0 }}>
                         VISUALIZACIÓN · Instrumento
                     </p>
-                    <h1 style={{ fontSize: 16, fontWeight: 700, color: '#191919', margin: '3px 0 0', lineHeight: 1.2 }}>
-                        {inst.nombre}
-                    </h1>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 3 }}>
+                        <h1 style={{ fontSize: 16, fontWeight: 700, color: '#191919', margin: 0, lineHeight: 1.2 }}>
+                            {inst.nombre}
+                        </h1>
+                        <button
+                            onClick={() => window.open(`https://web.finantech.cl/admin/instruments/${inst.id}`, '_blank')}
+                            title="Ver en Finantech"
+                            style={{
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                width: 24, height: 24, borderRadius: 6, border: 'none',
+                                backgroundColor: 'transparent', color: '#9F9F9F', cursor: 'pointer',
+                                transition: 'all 0.15s', flexShrink: 0
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#EBF7F6'; e.currentTarget.style.color = '#299D91'; }}
+                            onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#9F9F9F'; }}
+                        >
+                            <ExternalLinkIcon />
+                        </button>
+                    </div>
                 </div>
-                <select value={selectedId} onChange={e => setSelectedId(Number(e.target.value))}
-                    style={{ padding: '7px 14px', borderRadius: 10, border: '1px solid #DDE3E6', backgroundColor: '#FFFFFF', fontSize: 12, fontWeight: 600, color: '#191919', cursor: 'pointer', outline: 'none', maxWidth: 320, boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
-                    {INSTRUMENTOS.map(i => <option key={i.id} value={i.id}>{i.nombre}</option>)}
-                </select>
+                {/* Buscador por ID */}
+                <div style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    padding: '6px 14px', borderRadius: 10,
+                    border: '1px solid #DDE3E6', backgroundColor: '#FFFFFF',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                    width: 140, transition: 'border-color 0.2s'
+                }}
+                    onFocusCapture={e => e.currentTarget.style.borderColor = TEAL}
+                    onBlurCapture={e => e.currentTarget.style.borderColor = '#DDE3E6'}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9F9F9F" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+                    </svg>
+                    <input
+                        type="text"
+                        placeholder="Buscar ID..."
+                        value={searchId}
+                        onChange={e => handleSearch(e.target.value)}
+                        style={{
+                            border: 'none', outline: 'none', background: 'transparent',
+                            fontSize: 12, fontWeight: 700, color: '#191919', width: '100%'
+                        }}
+                    />
+                </div>
             </div>
 
             {/* ══ MÉTRICAS — 5 tarjetas compactas ══ */}

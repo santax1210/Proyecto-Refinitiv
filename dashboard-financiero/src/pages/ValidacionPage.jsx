@@ -1,26 +1,29 @@
 import { useState, useMemo } from 'react';
 
 const SAMPLE_DATA = [
-    { id: 1, instrumento: 'Bono Gobierno 2025', tipo: 'Renta Fija', estado: 'Válido', region: 'Latam', divisa: 'USD', valor: 125000 },
-    { id: 2, instrumento: 'Acción Apple Inc.', tipo: 'Renta Variable', estado: 'Pendiente', region: 'EEUU', divisa: 'USD', valor: 87500 },
-    { id: 3, instrumento: 'ETF S&P500', tipo: 'ETF', estado: 'Error', region: 'Global', divisa: 'USD', valor: 340000 },
-    { id: 4, instrumento: 'Bono Corporativo BBB', tipo: 'Renta Fija', estado: 'Válido', region: 'Europa', divisa: 'EUR', valor: 95000 },
-    { id: 5, instrumento: 'Acción Tesla Inc.', tipo: 'Renta Variable', estado: 'Válido', region: 'EEUU', divisa: 'USD', valor: 210000 },
-    { id: 6, instrumento: 'FCI Liquidez', tipo: 'FCI', estado: 'Pendiente', region: 'Local', divisa: 'ARS', valor: 500000 },
-    { id: 7, instrumento: 'ON YPF 2027', tipo: 'Renta Fija', estado: 'Error', region: 'Local', divisa: 'USD', valor: 175000 },
-    { id: 8, instrumento: 'Acción Amazon.com', tipo: 'Renta Variable', estado: 'Válido', region: 'EEUU', divisa: 'USD', valor: 430000 },
-    { id: 9, instrumento: 'Bono EM Asia', tipo: 'Renta Fija', estado: 'Válido', region: 'Asia', divisa: 'USD', valor: 60000 },
-    { id: 10, instrumento: 'FCI Acciones', tipo: 'FCI', estado: 'Pendiente', region: 'Local', divisa: 'ARS', valor: 285000 },
-    { id: 11, instrumento: 'Acción Microsoft', tipo: 'Renta Variable', estado: 'Válido', region: 'EEUU', divisa: 'USD', valor: 520000 },
-    { id: 12, instrumento: 'ETF Nasdaq 100', tipo: 'ETF', estado: 'Válido', region: 'Global', divisa: 'USD', valor: 760000 },
+    { id: 23, instrumento: 'FM BCI Gestión Global Dinámica 80', id_inst: '23', estado: 'Balanceado', moneda_antigua: 'CLP', pct_antiguo: 100, estado_idx: 1 },
+    { id: 31, instrumento: 'MFS European Value Fund - A1', id_inst: '31', estado: 'No Balanceado', moneda_antigua: 'EUR', pct_antiguo: 100, estado_idx: 2 },
+    { id: 149, instrumento: 'iShares MSCI ACWI ETF (ACWI)', id_inst: '149', estado: 'Sin datos', moneda_antigua: 'USD', pct_antiguo: 95.5, estado_idx: 3 },
+    { id: 692, instrumento: 'PIMCO GIS Total Return Bond Fund E', id_inst: '692', estado: 'Balanceado', moneda_antigua: 'USD', pct_antiguo: 100, estado_idx: 1 },
+    { id: 389, instrumento: 'Vanguard FTSE Emerging Markets ETF', id_inst: '389', estado: 'Balanceado', moneda_antigua: 'USD', pct_antiguo: 100, estado_idx: 1 },
+    { id: 1006, instrumento: 'FCI Liquidez', id_inst: '1006', estado: 'No Balanceado', moneda_antigua: 'ARS', pct_antiguo: 80.2, estado_idx: 2 },
+    { id: 1007, instrumento: 'ON YPF 2027', id_inst: '1007', estado: 'Sin datos', moneda_antigua: 'USD', pct_antiguo: 100, estado_idx: 3 },
+    { id: 1008, instrumento: 'Acción Amazon.com', id_inst: '1008', estado: 'Balanceado', moneda_antigua: 'USD', pct_antiguo: 100, estado_idx: 1 },
+    { id: 9, instrumento: 'Bono EM Asia 2030', id_inst: 'ASIA30', estado: 'Balanceado', moneda_antigua: 'USD', pct_antiguo: 100, estado_idx: 1 },
+    { id: 10, instrumento: 'ETF Nasdaq 100', id_inst: 'QQQ', estado: 'No Balanceado', moneda_antigua: 'USD', pct_antiguo: 90, estado_idx: 2 },
+    { id: 11, instrumento: 'Acción Microsoft', id_inst: 'MSFT', estado: 'Balanceado', moneda_antigua: 'USD', pct_antiguo: 100, estado_idx: 1 },
+    { id: 12, instrumento: 'Bono Tesoro 10Y', id_inst: 'T10Y', estado: 'Balanceado', moneda_antigua: 'USD', pct_antiguo: 100, estado_idx: 1 },
+    { id: 13, instrumento: 'FCI Renta Mixta', id_inst: 'FCI-RM', estado: 'No Balanceado', moneda_antigua: 'ARS', pct_antiguo: 75.5, estado_idx: 2 },
+    { id: 14, instrumento: 'Acción MercadoLibre', id_inst: 'MELI', estado: 'Sin datos', moneda_antigua: 'USD', pct_antiguo: 100, estado_idx: 3 },
+    { id: 15, instrumento: 'ON Pampa Energía', id_inst: 'PAMP29', estado: 'Balanceado', moneda_antigua: 'USD', pct_antiguo: 100, estado_idx: 1 },
 ];
 
-const TABS = ['Todos', 'Válido', 'Pendiente', 'Error'];
+const TABS = ['Todos', 'Balanceado', 'No Balanceado', 'Sin datos'];
 
 const ESTADO_CFG = {
-    'Válido': { dot: '#299D91', bg: '#EBF7F6', text: '#299D91' },
-    'Pendiente': { dot: '#F0A050', bg: '#FFF7ED', text: '#D97706' },
-    'Error': { dot: '#E05252', bg: '#FEF2F2', text: '#DC2626' },
+    'Balanceado': { dot: '#299D91', bg: '#EBF7F6', text: '#299D91' },
+    'No Balanceado': { dot: '#F0A050', bg: '#FFF7ED', text: '#D97706' },
+    'Sin datos': { dot: '#9F9F9F', bg: '#F3F4F6', text: '#71717A' },
 };
 const TIPO_CFG = {
     'Renta Fija': { bg: '#EEF2FF', text: '#6366F1' },
@@ -58,22 +61,25 @@ function DotsIcon() {
 const borderBottom = { borderBottom: '1px solid #F0F0F0' };
 const borderTop = { borderTop: '1px solid #F0F0F0' };
 
-export default function ValidacionPage() {
+export default function ValidacionPage({ onNavigate, onSelect }) {
     const [activeTab, setActiveTab] = useState('Todos');
     const [search, setSearch] = useState('');
     const [selected, setSelected] = useState([]);
     const [page, setPage] = useState(1);
-    const rowsPerPage = 10;
+    const [showFilterMenu, setShowFilterMenu] = useState(false);
+    const [filterEstadoIdx, setFilterEstadoIdx] = useState(null); // null (todos), 1, 2 o 3
+    const rowsPerPage = 15;
 
     const filtered = useMemo(() =>
         SAMPLE_DATA.filter(r => {
             const matchTab = activeTab === 'Todos' || r.estado === activeTab;
+            const matchEstadoIdx = !filterEstadoIdx || r.estado_idx === filterEstadoIdx;
             const matchSearch = !search ||
                 r.instrumento.toLowerCase().includes(search.toLowerCase()) ||
-                r.tipo.toLowerCase().includes(search.toLowerCase()) ||
-                r.region.toLowerCase().includes(search.toLowerCase());
-            return matchTab && matchSearch;
-        }), [activeTab, search]);
+                r.id_inst.toLowerCase().includes(search.toLowerCase()) ||
+                r.moneda_antigua.toLowerCase().includes(search.toLowerCase());
+            return matchTab && matchEstadoIdx && matchSearch;
+        }), [activeTab, filterEstadoIdx, search]);
 
     const totalPages = Math.ceil(filtered.length / rowsPerPage);
     const paged = filtered.slice((page - 1) * rowsPerPage, page * rowsPerPage);
@@ -93,11 +99,10 @@ export default function ValidacionPage() {
         check: 36,
         expand: 32,
         instrumento: 0,   /* flex-1 */
-        tipo: 140,
+        id_inst: 120,
         estado: 125,
-        region: 80,
-        divisa: 65,
-        valor: 105,
+        moneda_antigua: 130,
+        pct_antiguo: 110,
         acciones: 48,
     };
     const PX = 32; /* padding horizontal del card/filas (pixels) */
@@ -105,11 +110,11 @@ export default function ValidacionPage() {
     const rowStyle = (isSel) => ({
         display: 'flex',
         alignItems: 'center',
-        padding: `7px ${PX}px`,
+        padding: `11px ${PX}px`,
         gap: 0,
         backgroundColor: isSel ? '#F0FFFE' : 'transparent',
         transition: 'background-color 0.12s',
-        cursor: 'default',
+        cursor: 'pointer',
     });
 
     return (
@@ -122,17 +127,19 @@ export default function ValidacionPage() {
                     <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#9F9F9F', marginBottom: 4 }}>
                         VALIDACIÓN
                     </p>
-                    <h1 style={{ fontSize: 17, fontWeight: 700, color: '#191919', margin: 0 }}>
+                    <h1 style={{ fontSize: 20, fontWeight: 700, color: '#191919', margin: 0 }}>
                         Resultados de Allocations
                     </h1>
                 </div>
                 <div style={{ textAlign: 'right', paddingLeft: 32, flexShrink: 0 }}>
-                    <p style={{ fontSize: 11, color: '#9F9F9F', margin: '0 0 2px' }}>Total validado</p>
+                    <p style={{ fontSize: 11, color: '#9F9F9F', margin: '0 0 2px' }}>Instrumentos</p>
                     <p style={{ margin: 0 }}>
                         <span style={{ fontSize: 22, fontWeight: 700, color: '#299D91' }}>
-                            {new Intl.NumberFormat('es-AR').format(totalGeneral)}
+                            {filtered.length}
                         </span>
-                        <span style={{ fontSize: 12, color: '#9F9F9F', marginLeft: 4 }}>USD</span>
+                        <span style={{ fontSize: 13, color: '#9F9F9F', marginLeft: 4 }}>
+                            / {SAMPLE_DATA.length}
+                        </span>
                     </p>
                 </div>
             </div>
@@ -179,16 +186,33 @@ export default function ValidacionPage() {
                 {/* ── Toolbar ── */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: `8px ${PX}px`, ...borderBottom }}>
                     {/* Filtrar */}
-                    <button
-                        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: '1px solid #E8E8E8', color: '#525256', backgroundColor: '#FAFAFA', flexShrink: 0, transition: 'border-color 0.15s' }}
-                        onMouseEnter={e => { e.currentTarget.style.borderColor = '#299D91'; e.currentTarget.style.color = '#299D91'; }}
-                        onMouseLeave={e => { e.currentTarget.style.borderColor = '#E8E8E8'; e.currentTarget.style.color = '#525256'; }}
-                    >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
-                        </svg>
-                        Filtrar
-                    </button>
+                    <div style={{ position: 'relative' }}>
+                        <button
+                            onClick={() => setShowFilterMenu(!showFilterMenu)}
+                            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: `1px solid ${filterEstadoIdx ? '#299D91' : '#E8E8E8'}`, color: filterEstadoIdx ? '#299D91' : '#525256', backgroundColor: filterEstadoIdx ? '#EBF7F6' : '#FAFAFA', transition: 'all 0.15s' }}
+                        >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+                            </svg>
+                            {filterEstadoIdx ? `Estado ${filterEstadoIdx}` : 'Filtrar'}
+                        </button>
+
+                        {showFilterMenu && (
+                            <div style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, zIndex: 50, width: 160, backgroundColor: '#FFFFFF', borderRadius: 12, border: '1px solid #DDE3E6', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05)', padding: '6px' }}>
+                                {[null, 1, 2, 3].map((val) => (
+                                    <button
+                                        key={val === null ? 'all' : val}
+                                        onClick={() => { setFilterEstadoIdx(val); setShowFilterMenu(false); setPage(1); }}
+                                        style={{ display: 'block', width: '100%', padding: '10px 12px', textAlign: 'left', fontSize: 13, fontWeight: filterEstadoIdx === val ? 700 : 500, color: filterEstadoIdx === val ? '#299D91' : '#525256', backgroundColor: filterEstadoIdx === val ? '#F0FFFE' : 'transparent', border: 'none', borderRadius: 6, cursor: 'pointer', transition: 'background-color 0.1s' }}
+                                        onMouseEnter={e => { if (filterEstadoIdx !== val) e.currentTarget.style.backgroundColor = '#F9FAFB'; }}
+                                        onMouseLeave={e => { if (filterEstadoIdx !== val) e.currentTarget.style.backgroundColor = 'transparent'; }}
+                                    >
+                                        {val === null ? 'Ver todos' : `Estado ${val}`}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
 
                     {/* Buscador — crece */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, padding: '9px 14px', borderRadius: 12, border: '1px solid #E8E8E8', backgroundColor: '#FAFAFA', minWidth: 0 }}>
@@ -217,17 +241,16 @@ export default function ValidacionPage() {
                 </div>
 
                 {/* ── Cabecera columnas ── */}
-                <div style={{ display: 'flex', alignItems: 'center', padding: `12px ${PX}px`, ...borderBottom, color: '#71717A', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                <div style={{ display: 'flex', alignItems: 'center', padding: `10px ${PX}px`, ...borderBottom, color: '#71717A', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                     <div style={{ width: COL.check, flexShrink: 0, marginRight: 12 }}>
-                        <input type="checkbox" checked={allPageSel} onChange={toggleAll} style={{ width: 15, height: 15, cursor: 'pointer', accentColor: '#299D91' }} />
+                        <input type="checkbox" checked={allPageSel} onChange={toggleAll} style={{ width: 14, height: 14, cursor: 'pointer', accentColor: '#299D91' }} />
                     </div>
                     <div style={{ width: COL.expand, flexShrink: 0, marginRight: 16 }} />
                     <div style={{ flex: 1, minWidth: 0 }}>Instrumento</div>
-                    <div style={{ width: COL.tipo, flexShrink: 0 }}>Tipo</div>
+                    <div style={{ width: COL.id_inst, flexShrink: 0 }}>ID</div>
                     <div style={{ width: COL.estado, flexShrink: 0 }}>Estado</div>
-                    <div style={{ width: COL.region, flexShrink: 0 }}>Región</div>
-                    <div style={{ width: COL.divisa, flexShrink: 0 }}>Divisa</div>
-                    <div style={{ width: COL.valor, flexShrink: 0, textAlign: 'right' }}>Valor</div>
+                    <div style={{ width: COL.moneda_antigua, flexShrink: 0 }}>Moneda Antigua</div>
+                    <div style={{ width: COL.pct_antiguo, flexShrink: 0, textAlign: 'right' }}>PCT Antiguo</div>
                     <div style={{ width: COL.acciones, flexShrink: 0 }} />
                 </div>
 
@@ -245,11 +268,12 @@ export default function ValidacionPage() {
                         <div
                             key={row.id}
                             style={{ ...rowStyle(isSel), ...(idx < paged.length - 1 ? { borderBottom: '1px solid #F5F5F5' } : {}) }}
-                            onMouseEnter={e => { if (!isSel) e.currentTarget.style.backgroundColor = '#FAFAFA'; }}
+                            onMouseEnter={e => { if (!isSel) e.currentTarget.style.backgroundColor = '#E2E8F0'; }}
                             onMouseLeave={e => { e.currentTarget.style.backgroundColor = isSel ? '#F0FFFE' : 'transparent'; }}
+                            onClick={() => { onSelect(row.id); onNavigate('visualizacion'); }}
                         >
                             {/* Checkbox */}
-                            <div style={{ width: COL.check, flexShrink: 0, marginRight: 12 }} onClick={() => toggleRow(row.id)}>
+                            <div style={{ width: COL.check, flexShrink: 0, marginRight: 12 }} onClick={(e) => { e.stopPropagation(); toggleRow(row.id); }}>
                                 <input type="checkbox" readOnly checked={isSel} style={{ width: 15, height: 15, cursor: 'pointer', accentColor: '#299D91' }} />
                             </div>
 
@@ -263,27 +287,24 @@ export default function ValidacionPage() {
 
                             {/* Instrumento */}
                             <div style={{ flex: 1, minWidth: 0, paddingRight: 16 }}>
-                                <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#191919', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#191919', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                     {row.instrumento}
                                 </p>
                             </div>
 
-                            {/* Tipo */}
-                            <div style={{ width: COL.tipo, flexShrink: 0 }}><TipoPill tipo={row.tipo} /></div>
+                            {/* ID */}
+                            <div style={{ width: COL.id_inst, flexShrink: 0, fontSize: 14, color: '#525256' }}>{row.id_inst}</div>
 
                             {/* Estado */}
                             <div style={{ width: COL.estado, flexShrink: 0 }}><EstadoPill estado={row.estado} /></div>
 
-                            {/* Región */}
-                            <div style={{ width: COL.region, flexShrink: 0, fontSize: 13, color: '#525256' }}>{row.region}</div>
+                            {/* Moneda Antigua */}
+                            <div style={{ width: COL.moneda_antigua, flexShrink: 0, fontSize: 14, fontWeight: 500, color: '#525256' }}>{row.moneda_antigua}</div>
 
-                            {/* Divisa */}
-                            <div style={{ width: COL.divisa, flexShrink: 0, fontSize: 13, fontWeight: 500, color: '#878787' }}>{row.divisa}</div>
-
-                            {/* Valor */}
-                            <div style={{ width: COL.valor, flexShrink: 0, textAlign: 'right' }}>
-                                <span style={{ fontSize: 14, fontWeight: 700, color: '#191919' }}>
-                                    {new Intl.NumberFormat('es-AR').format(row.valor)}
+                            {/* PCT Antiguo */}
+                            <div style={{ width: COL.pct_antiguo, flexShrink: 0, textAlign: 'right' }}>
+                                <span style={{ fontSize: 15, fontWeight: 700, color: '#191919' }}>
+                                    {row.pct_antiguo}%
                                 </span>
                             </div>
 
@@ -328,6 +349,40 @@ export default function ValidacionPage() {
                             ))}
                         </div>
                     </div>
+                </div>
+
+                {/* ── Botones de Generación ── */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12, padding: `16px ${PX}px`, backgroundColor: '#F9FAFB', ...borderTop }}>
+                    <button
+                        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', border: 'none', backgroundColor: '#299D91', color: '#FFFFFF', transition: 'all 0.15s' }}
+                        onMouseEnter={e => e.currentTarget.style.backgroundColor = '#22857a'}
+                        onMouseLeave={e => e.currentTarget.style.backgroundColor = '#299D91'}
+                    >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v4a2 2 0 0 1 2-2" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                        Generar Balanceado
+                    </button>
+                    <button
+                        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', border: 'none', backgroundColor: '#F0A050', color: '#FFFFFF', transition: 'all 0.15s' }}
+                        onMouseEnter={e => e.currentTarget.style.backgroundColor = '#d98a3d'}
+                        onMouseLeave={e => e.currentTarget.style.backgroundColor = '#F0A050'}
+                    >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v4a2 2 0 0 1 2-2" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                        Generar no balanceados
+                    </button>
+                    <button
+                        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', border: 'none', backgroundColor: '#9F9F9F', color: '#FFFFFF', transition: 'all 0.15s' }}
+                        onMouseEnter={e => e.currentTarget.style.backgroundColor = '#8a8a8a'}
+                        onMouseLeave={e => e.currentTarget.style.backgroundColor = '#9F9F9F'}
+                    >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v4a2 2 0 0 1 2-2" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                        Generar sin datos
+                    </button>
                 </div>
 
             </div>{/* fin card */}
