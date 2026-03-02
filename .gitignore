@@ -1,0 +1,134 @@
+# =============================================================================
+# .gitignore ROOT - Proyecto de Conciliación de Allocations
+# =============================================================================
+# Este archivo cubre el proyecto Python/Backend.
+# El dashboard React tiene su propio .gitignore en dashboard-financiero/
+# =============================================================================
+
+# ============= Python (Backend) =============
+# Entorno virtual
+venv/
+env/
+ENV/
+.venv/
+.env/
+
+# Archivos compilados de Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Distribución / empaquetado
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# ============= Datos del Proyecto =============
+# Archivos procesados (se generan automáticamente)
+data/processed/
+data/exports/
+data/backups/
+
+# Datos raw sensibles (descomentar si no quieres subirlos a Git)
+# data/raw/*.csv
+
+# Archivos temporales de depuración
+debug_*.txt
+*.tmp
+
+# ============= Logs del Proyecto =============
+logs/
+*.log
+!logs/.gitkeep
+
+# ============= IDE y Editores =============
+# VS Code (configuración local)
+.vscode/*
+!.vscode/settings.json.example
+!.vscode/extensions.json
+.history/
+
+# PyCharm
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# ============= Sistema Operativo =============
+# Windows
+Thumbs.db
+eviews.exe
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# ============= Otros =============
+# Archivos de backup
+*.bak
+*.backup
+*.old
+
+# Archivos comprimidos
+*.zip
+*.tar.gz
+*.rar
+
+# Credenciales y configuración sensible
+.env
+.env.local
+.env.production
+secrets.json
+config.ini
+credentials.json
+
+# =============================================================================
+# NOTA: El dashboard React (dashboard-financiero/) tiene su propio .gitignore
+# que maneja: node_modules, dist, .vscode específico del frontend, etc.
+# =============================================================================

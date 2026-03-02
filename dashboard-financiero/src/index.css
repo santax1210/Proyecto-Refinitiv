@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+/* ===================================================
+   DESIGN TOKENS - Financial Dashboard Color System
+   Extraídos de: Paleta colores.png
+   =================================================== */
+@theme {
+  /* Primario */
+  --color-primary: #299D91;
+  --color-primary-hover: #22857a;
+  --color-primary-light: #299d9120;
+
+  /* Neutros - Sidebar & Dark areas */
+  --color-neutral-950: #191919;
+  /* Sidebar bg / casi negro */
+  --color-neutral-700: #525256;
+  /* Hover items / Logout bg */
+  --color-neutral-600: #666666;
+  /* Gris medio-oscuro */
+  --color-neutral-500: #878787;
+  /* Texto secundario */
+  --color-neutral-400: #9F9F9F;
+  /* Texto desactivado */
+  --color-neutral-200: #E8E8E8;
+  /* Bordes, divisores */
+  --color-neutral-100: #F3F3F3;
+  /* Background contenido */
+
+  /* Semánticos */
+  --color-success: #299D91;
+  /* Mismo primario para éxito */
+  --color-error: #E05252;
+  /* Rojo error */
+  --color-warning: #F0A050;
+  /* Ámbar advertencia */
+
+  /* Sidebar */
+  --color-sidebar-bg: #191919;
+  --color-sidebar-active: #299D91;
+  --color-sidebar-hover: #525256;
+  --color-sidebar-text: #9F9F9F;
+  --color-sidebar-text-active: #FFFFFF;
+
+  /* Tipografía */
+  --font-sans: 'Inter', system-ui, sans-serif;
+}
+
+/* ===================================================
+   GLOBAL RESET & BASE
+   =================================================== */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  font-family: var(--font-sans);
+  background-color: var(--color-neutral-100);
+  color: var(--color-neutral-950);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ===================================================
+   SCROLLBAR CUSTOM (Sidebar)
+   =================================================== */
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-neutral-700);
+  border-radius: 2px;
+}

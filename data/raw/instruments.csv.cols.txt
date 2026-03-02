@@ -1,0 +1,91 @@
+Columnas para data/raw/instruments.csv:
+ID
+Nombre
+Nombre corto
+Emisor
+Tasa emision
+Tera
+Valor rescate
+Fecha vcto
+Serie
+Pais
+Tipo instrumento
+Moneda
+E
+Metodo valoriz
+Base
+Periodicidad
+Fecha emision
+BBGID
+BCI_id
+BC_id
+BICE_id
+BTG_id
+CC_id
+CITI_id
+Currency
+Cusip
+FWD
+GS_id
+Isin
+LV_id
+MBI_id
+MS_id
+Moneda_id
+Nemo
+Nemo_DCV
+PRINCIPAL_id
+RIC
+SEC_id
+SURA_id
+Sedol
+Ticker_BB
+UBS_id
+base-subclase-activo
+SubMoneda
+base-region
+alloc-subclase-activo
+alloc-subclase-activo-2
+alloc-subclase-patrimonio
+alloc-subclase-patrimonio2
+alternativos
+alternativos-ldg
+asset-grade
+base-subclase-patrimonial
+caja-patromonial
+clase-activo
+clase-activo-2
+clase-patrimonial
+clasificacion-activos-moneda
+continentes
+economia
+mercado
+mercado-patrimonio
+monedas-pc
+rating-moody
+rating-s_p
+region
+region-2
+region-categoria
+region-nuevo
+region-pc
+region-rvi
+rent-subclase-activo
+rent-subclase-activo-2
+riesgo
+riesgo-rf-pc
+RRFI
+sector-categoria
+sectores
+sectores-2
+sri
+subcategoria-activo-2
+subclase-patrimonial
+tipo-activo-pasivo
+tipo-bono
+tipo-patrimonio
+tipo-patrimonio-2
+Fuente Precio
+Url Precio
+Fuente Alloc
+Url Alloc

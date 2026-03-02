@@ -1,0 +1,6 @@
+# Directorio para archivos raw (fuente)
+# Coloca aquí los archivos CSV de entrada:
+# - posiciones.csv
+# - instruments.csv
+# - allocations_nuevas.csv
+# - allocations_currency.csv

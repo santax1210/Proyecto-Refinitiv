@@ -1,0 +1,2 @@
+Columnas para data/raw/allocations_nuevas.csv:
+;instrument;date;class;percentage;Columna Fuente;classif

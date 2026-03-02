@@ -1,0 +1,30 @@
+# =============================================================================
+# Dependencias del Proyecto: Conciliación de Allocations
+# =============================================================================
+# Este archivo define las dependencias Python necesarias para ejecutar
+# el pipeline de validación de allocations.
+#
+# Instalación:
+#   pip install -r requirements.txt
+#
+# Actualización:
+#   pip freeze > requirements.txt
+# =============================================================================
+
+# Análisis y manipulación de datos
+pandas>=2.0.0,<3.0.0
+numpy>=1.24.0,<2.0.0
+
+# Soporte para archivos Excel (opcional, para futuros exports)
+openpyxl>=3.1.0,<4.0.0
+
+# Dashboard y visualización (opcional)
+streamlit>=1.30.0,<2.0.0
+
+# Utilidades de fecha y tiempo (ya incluidas en Python std, pero por si acaso)
+python-dateutil>=2.8.0
+
+# Para testing y desarrollo (opcional)
+pytest>=7.4.0,<8.0.0
+pytest-cov>=4.1.0,<5.0.0
+
