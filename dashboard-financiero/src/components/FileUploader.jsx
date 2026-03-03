@@ -80,6 +80,7 @@ export default function FileUploader({ onAttach }) {
             name: f.name,
             size: (f.size / (1024 * 1024)).toFixed(2) + ' MB',
             progress: 0,
+            file: f, // Guardar referencia al archivo real
         }));
         setFiles(prev => [...prev, ...entries]);
         entries.forEach(e => simulateProgress(e.id));
@@ -147,7 +148,7 @@ export default function FileUploader({ onAttach }) {
 
             {/* ── Botón Adjuntar ── */}
             <button
-                onClick={() => onAttach && onAttach(attachable)}
+                onClick={() => onAttach && onAttach(attachable.map(f => f.file))}
                 disabled={attachable.length === 0}
                 style={{
                     width: '100%', padding: '12px',
@@ -161,7 +162,7 @@ export default function FileUploader({ onAttach }) {
                 onMouseEnter={e => { if (attachable.length > 0) e.currentTarget.style.backgroundColor = '#227d73'; }}
                 onMouseLeave={e => { if (attachable.length > 0) e.currentTarget.style.backgroundColor = TEAL; }}
             >
-                {attachable.length > 0 ? `Procesar ${attachable.length} archivo${attachable.length > 1 ? 's' : ''}` : 'Adjuntar archivo'}
+                {attachable.length > 0 ? `Adjuntar ${attachable.length} archivo${attachable.length > 1 ? 's' : ''}` : 'Adjuntar archivo'}
             </button>
         </div>
     );

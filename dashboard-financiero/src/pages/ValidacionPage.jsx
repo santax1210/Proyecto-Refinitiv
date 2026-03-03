@@ -1,22 +1,5 @@
-import { useState, useMemo } from 'react';
-
-const SAMPLE_DATA = [
-    { id: 23, instrumento: 'FM BCI Gestión Global Dinámica 80', id_inst: '23', estado: 'Balanceado', moneda_antigua: 'CLP', pct_antiguo: 100, estado_idx: 1 },
-    { id: 31, instrumento: 'MFS European Value Fund - A1', id_inst: '31', estado: 'No Balanceado', moneda_antigua: 'EUR', pct_antiguo: 100, estado_idx: 2 },
-    { id: 149, instrumento: 'iShares MSCI ACWI ETF (ACWI)', id_inst: '149', estado: 'Sin datos', moneda_antigua: 'USD', pct_antiguo: 95.5, estado_idx: 3 },
-    { id: 692, instrumento: 'PIMCO GIS Total Return Bond Fund E', id_inst: '692', estado: 'Balanceado', moneda_antigua: 'USD', pct_antiguo: 100, estado_idx: 1 },
-    { id: 389, instrumento: 'Vanguard FTSE Emerging Markets ETF', id_inst: '389', estado: 'Balanceado', moneda_antigua: 'USD', pct_antiguo: 100, estado_idx: 1 },
-    { id: 1006, instrumento: 'FCI Liquidez', id_inst: '1006', estado: 'No Balanceado', moneda_antigua: 'ARS', pct_antiguo: 80.2, estado_idx: 2 },
-    { id: 1007, instrumento: 'ON YPF 2027', id_inst: '1007', estado: 'Sin datos', moneda_antigua: 'USD', pct_antiguo: 100, estado_idx: 3 },
-    { id: 1008, instrumento: 'Acción Amazon.com', id_inst: '1008', estado: 'Balanceado', moneda_antigua: 'USD', pct_antiguo: 100, estado_idx: 1 },
-    { id: 9, instrumento: 'Bono EM Asia 2030', id_inst: 'ASIA30', estado: 'Balanceado', moneda_antigua: 'USD', pct_antiguo: 100, estado_idx: 1 },
-    { id: 10, instrumento: 'ETF Nasdaq 100', id_inst: 'QQQ', estado: 'No Balanceado', moneda_antigua: 'USD', pct_antiguo: 90, estado_idx: 2 },
-    { id: 11, instrumento: 'Acción Microsoft', id_inst: 'MSFT', estado: 'Balanceado', moneda_antigua: 'USD', pct_antiguo: 100, estado_idx: 1 },
-    { id: 12, instrumento: 'Bono Tesoro 10Y', id_inst: 'T10Y', estado: 'Balanceado', moneda_antigua: 'USD', pct_antiguo: 100, estado_idx: 1 },
-    { id: 13, instrumento: 'FCI Renta Mixta', id_inst: 'FCI-RM', estado: 'No Balanceado', moneda_antigua: 'ARS', pct_antiguo: 75.5, estado_idx: 2 },
-    { id: 14, instrumento: 'Acción MercadoLibre', id_inst: 'MELI', estado: 'Sin datos', moneda_antigua: 'USD', pct_antiguo: 100, estado_idx: 3 },
-    { id: 15, instrumento: 'ON Pampa Energía', id_inst: 'PAMP29', estado: 'Balanceado', moneda_antigua: 'USD', pct_antiguo: 100, estado_idx: 1 },
-];
+import { useState, useMemo, useEffect } from 'react';
+import { useApp } from '../context/AppContext';
 
 const TABS = ['Todos', 'Balanceado', 'No Balanceado', 'Sin datos'];
 
@@ -62,24 +45,63 @@ const borderBottom = { borderBottom: '1px solid #F0F0F0' };
 const borderTop = { borderTop: '1px solid #F0F0F0' };
 
 export default function ValidacionPage({ onNavigate, onSelect }) {
+    const { validationData, loadValidationResults, summary } = useApp();
     const [activeTab, setActiveTab] = useState('Todos');
     const [search, setSearch] = useState('');
     const [selected, setSelected] = useState([]);
     const [page, setPage] = useState(1);
     const [showFilterMenu, setShowFilterMenu] = useState(false);
-    const [filterEstadoIdx, setFilterEstadoIdx] = useState(null); // null (todos), 1, 2 o 3
+    const [filterEstadoIdx, setFilterEstadoIdx] = useState(null);
+    const [loading, setLoading] = useState(false);
     const rowsPerPage = 15;
 
+    // Cargar datos al montar el componente si no están disponibles
+    useEffect(() => {
+        if (!validationData) {
+            setLoading(true);
+            loadValidationResults()
+                .catch(err => console.error('Error al cargar datos:', err))
+                .finally(() => setLoading(false));
+        }
+    }, [validationData, loadValidationResults]);
+
+    // Usar los datos reales o array vacío si no hay datos
+    const SAMPLE_DATA = validationData || [];
+
+    // Filtrado basado en moneda_nueva y Cambio
     const filtered = useMemo(() =>
         SAMPLE_DATA.filter(r => {
-            const matchTab = activeTab === 'Todos' || r.estado === activeTab;
-            const matchEstadoIdx = !filterEstadoIdx || r.estado_idx === filterEstadoIdx;
+            // Filtro por Tab (usa moneda_nueva y Cambio, NO la columna Estado)
+            let matchTab = true;
+            if (activeTab === 'Balanceado') {
+                matchTab = r.moneda_nueva && r.moneda_nueva.toLowerCase() === 'balanceado';
+            } else if (activeTab === 'No Balanceado') {
+                // Cualquier moneda específica (CLP, USD, EUR, etc.) que NO sea balanceado
+                matchTab = r.moneda_nueva && 
+                          r.moneda_nueva.toLowerCase() !== 'balanceado' &&
+                          r.moneda_nueva.trim() !== '' &&
+                          r.Cambio !== 'Sin datos';
+            } else if (activeTab === 'Sin datos') {
+                matchTab = r.Cambio === 'Sin datos';
+            }
+            // activeTab === 'Todos' → matchTab = true (todos pasan)
+
+            // Filtro adicional de estado_idx (si se usa dropdown de filtro)
+            const matchEstadoIdx = !filterEstadoIdx || (() => {
+                if (filterEstadoIdx === 1) return r.moneda_nueva && r.moneda_nueva.toLowerCase() === 'balanceado';
+                if (filterEstadoIdx === 2) return r.moneda_nueva && r.moneda_nueva.toLowerCase() !== 'balanceado' && r.Cambio !== 'Sin datos';
+                if (filterEstadoIdx === 3) return r.Cambio === 'Sin datos';
+                return true;
+            })();
+
+            // Filtro de búsqueda
             const matchSearch = !search ||
-                r.instrumento.toLowerCase().includes(search.toLowerCase()) ||
-                r.id_inst.toLowerCase().includes(search.toLowerCase()) ||
-                r.moneda_antigua.toLowerCase().includes(search.toLowerCase());
+                (r.Nombre && r.Nombre.toLowerCase().includes(search.toLowerCase())) ||
+                (r.ID && r.ID.toString().toLowerCase().includes(search.toLowerCase())) ||
+                (r.moneda_antigua && r.moneda_antigua.toLowerCase().includes(search.toLowerCase()));
+            
             return matchTab && matchEstadoIdx && matchSearch;
-        }), [activeTab, filterEstadoIdx, search]);
+        }), [activeTab, filterEstadoIdx, search, SAMPLE_DATA]);
 
     const totalPages = Math.ceil(filtered.length / rowsPerPage);
     const paged = filtered.slice((page - 1) * rowsPerPage, page * rowsPerPage);
@@ -120,6 +142,67 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
     return (
         /* ── Página completa ── */
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '20px 28px', width: '100%', maxWidth: '1400px', margin: '0 auto' }}>
+
+            {/* ── Mensaje de carga ── */}
+            {loading && (
+                <div style={{ 
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    alignItems: 'center', 
+                    justifyContent: 'center', 
+                    padding: '60px 20px',
+                    backgroundColor: '#FFFFFF',
+                    borderRadius: 16,
+                    border: '1px solid #DDE3E6'
+                }}>
+                    <div style={{ 
+                        width: 40, 
+                        height: 40, 
+                        border: '3px solid #299D91', 
+                        borderTopColor: 'transparent',
+                        borderRadius: '50%',
+                        animation: 'spin 1s linear infinite',
+                        marginBottom: 16
+                    }} />
+                    <p style={{ fontSize: 14, fontWeight: 600, color: '#525256', margin: 0 }}>
+                        Cargando datos de validación...
+                    </p>
+                </div>
+            )}
+
+            {/* ── Mensaje si no hay datos ── */}
+            {!loading && SAMPLE_DATA.length === 0 && (
+                <div style={{ 
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    alignItems: 'center', 
+                    justifyContent: 'center', 
+                    padding: '60px 20px',
+                    backgroundColor: '#FFFFFF',
+                    borderRadius: 16,
+                    border: '1px solid #DDE3E6',
+                    gap: 16
+                }}>
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#9F9F9F" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                        <line x1="12" y1="18" x2="12" y2="12" />
+                        <line x1="12" y1="9" x2="12" y2="9" />
+                    </svg>
+                    <div style={{ textAlign: 'center' }}>
+                        <p style={{ fontSize: 16, fontWeight: 700, color: '#191919', margin: 0 }}>
+                            No hay datos procesados
+                        </p>
+                        <p style={{ fontSize: 13, color: '#71717A', margin: '8px 0 0' }}>
+                            Subí archivos en la página de Inicio y procesalos para ver los resultados aquí.
+                        </p>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Contenido principal (solo si hay datos) ── */}
+            {!loading && SAMPLE_DATA.length > 0 && (
+                <>
 
             {/* ── Encabezado ── */}
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
@@ -263,17 +346,17 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                         <p style={{ fontSize: 14, fontWeight: 500 }}>Sin resultados para la búsqueda</p>
                     </div>
                 ) : paged.map((row, idx) => {
-                    const isSel = selected.includes(row.id);
+                    const isSel = selected.includes(row.ID);
                     return (
                         <div
-                            key={row.id}
+                            key={row.ID}
                             style={{ ...rowStyle(isSel), ...(idx < paged.length - 1 ? { borderBottom: '1px solid #F5F5F5' } : {}) }}
                             onMouseEnter={e => { if (!isSel) e.currentTarget.style.backgroundColor = '#E2E8F0'; }}
                             onMouseLeave={e => { e.currentTarget.style.backgroundColor = isSel ? '#F0FFFE' : 'transparent'; }}
-                            onClick={() => { onSelect(row.id); onNavigate('visualizacion'); }}
+                            onClick={() => { onSelect(row.ID); onNavigate('visualizacion'); }}
                         >
                             {/* Checkbox */}
-                            <div style={{ width: COL.check, flexShrink: 0, marginRight: 12 }} onClick={(e) => { e.stopPropagation(); toggleRow(row.id); }}>
+                            <div style={{ width: COL.check, flexShrink: 0, marginRight: 12 }} onClick={(e) => { e.stopPropagation(); toggleRow(row.ID); }}>
                                 <input type="checkbox" readOnly checked={isSel} style={{ width: 15, height: 15, cursor: 'pointer', accentColor: '#299D91' }} />
                             </div>
 
@@ -288,23 +371,23 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                             {/* Instrumento */}
                             <div style={{ flex: 1, minWidth: 0, paddingRight: 16 }}>
                                 <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#191919', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                    {row.instrumento}
+                                    {row.Nombre}
                                 </p>
                             </div>
 
                             {/* ID */}
-                            <div style={{ width: COL.id_inst, flexShrink: 0, fontSize: 14, color: '#525256' }}>{row.id_inst}</div>
+                            <div style={{ width: COL.id_inst, flexShrink: 0, fontSize: 14, color: '#525256' }}>{row.ID}</div>
 
-                            {/* Estado */}
-                            <div style={{ width: COL.estado, flexShrink: 0 }}><EstadoPill estado={row.estado} /></div>
+                            {/* Estado - Muestra Estado_1, Estado_2, Estado_3 */}
+                            <div style={{ width: COL.estado, flexShrink: 0, fontSize: 14, fontWeight: 500, color: '#525256' }}>{row.Estado || ''}</div>
 
                             {/* Moneda Antigua */}
-                            <div style={{ width: COL.moneda_antigua, flexShrink: 0, fontSize: 14, fontWeight: 500, color: '#525256' }}>{row.moneda_antigua}</div>
+                            <div style={{ width: COL.moneda_antigua, flexShrink: 0, fontSize: 14, fontWeight: 500, color: '#525256' }}>{row.moneda_antigua || '-'}</div>
 
                             {/* PCT Antiguo */}
                             <div style={{ width: COL.pct_antiguo, flexShrink: 0, textAlign: 'right' }}>
                                 <span style={{ fontSize: 15, fontWeight: 700, color: '#191919' }}>
-                                    {row.pct_antiguo}%
+                                    {row.pct_dominancia_antigua != null ? `${row.pct_dominancia_antigua}%` : '-'}
                                 </span>
                             </div>
 
@@ -386,6 +469,10 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                 </div>
 
             </div>{/* fin card */}
+            
+            </>
+            )}{/* fin contenido principal */}
+
         </div>
     );
 }

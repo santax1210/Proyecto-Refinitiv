@@ -71,11 +71,14 @@ def crear_df_final(df_instruments, df_dominancia_nuevas, df_dominancia_antiguas)
     # 4. Calcular columna de Cambio
     df_final['Cambio'] = df_final.apply(detectar_cambio, axis=1)
     
-    # 5. Reordenar columnas para presentación
+    # 5. Calcular columna de Estado (para filtros en frontend)
+    df_final['Estado'] = df_final.apply(calcular_estado, axis=1)
+    
+    # 6. Reordenar columnas para presentación
     cols_orden = [
         'Nombre', 'ID', 'Tipo instrumento', 'moneda_antigua',
         'moneda_nueva', 'pct_dominancia_nuevo', 'pct_escalado', 'pct_original',
-        'pct_dominancia_antigua', 'Cambio'
+        'pct_dominancia_antigua', 'Cambio', 'Estado'
     ]
     
     # Seleccionar solo las que existen
@@ -124,6 +127,64 @@ def detectar_cambio(row):
         return "No"
     else:
         return "Sí"
+
+
+def calcular_estado(row):
+    """
+    Calcula el estado del instrumento con la MISMA lógica que generar_exports.py.
+    
+    Lógica:
+    - Sin datos: Cambio == "Sin datos" → retorna vacío ""
+    - Para balanceados (moneda_nueva == "Balanceado"):
+        * Estado_1: Balanceado → Balanceado (moneda_antigua == "BALANCEADO")
+        * Estado_2: Moneda → Balanceado (moneda_antigua != "BALANCEADO")
+    - Para no balanceados (moneda_nueva != "Balanceado"):
+        * Estado_1: Moneda → Misma Moneda (moneda_antigua == moneda_nueva)
+        * Estado_2: Balanceado → Moneda (moneda_antigua == "BALANCEADO")
+        * Estado_3: Moneda → Otra Moneda (moneda_antigua != moneda_nueva)
+    
+    Parámetros:
+        row: Fila del DataFrame con columnas 'moneda_nueva', 'moneda_antigua', 'Cambio'
+    
+    Retorna:
+        str: "Estado_1", "Estado_2", "Estado_3" o "" (vacío para sin datos)
+    """
+    # Si no hay datos (Cambio == "Sin datos"), retornar vacío
+    if 'Cambio' in row and str(row['Cambio']).strip() == "Sin datos":
+        return ""
+    
+    # Obtener monedas
+    if 'moneda_nueva' not in row or 'moneda_antigua' not in row:
+        return ""
+    
+    moneda_nueva = str(row['moneda_nueva']).strip().upper()
+    moneda_antigua = str(row['moneda_antigua']).strip().upper()
+    
+    # Si son vacías o NaN, retornar vacío
+    if moneda_nueva in ['', 'NAN', 'NONE'] or moneda_antigua in ['', 'NAN', 'NONE']:
+        return ""
+    
+    # CASO 1: Instrumentos BALANCEADOS (moneda_nueva == "BALANCEADO")
+    if moneda_nueva == 'BALANCEADO':
+        # Estado_1: Balanceado → Balanceado
+        if moneda_antigua == 'BALANCEADO':
+            return 'Estado_1'
+        # Estado_2: Moneda → Balanceado
+        else:
+            return 'Estado_2'
+    
+    # CASO 2: Instrumentos NO BALANCEADOS (moneda_nueva es moneda específica)
+    else:
+        # Estado_2: Balanceado → Moneda
+        if moneda_antigua == 'BALANCEADO':
+            return 'Estado_2'
+        
+        # Estado_1: Moneda → Misma Moneda
+        if moneda_antigua == moneda_nueva:
+            return 'Estado_1'
+        
+        # Estado_3: Moneda → Otra Moneda
+        return 'Estado_3'
 
 
 def filtrar_cambios(df_final):
@@ -186,22 +247,22 @@ if __name__ == "__main__":
     # FASE 1: CARGAR DATOS BASE
     print("\n[Fase 1/4] Cargando datos base...")
     df_instr = load_df_instruments('data/raw/posiciones.csv', 'data/raw/instruments.csv')
-    print(f"  ✓ df_instruments: {len(df_instr)} registros")
+    print(f"  [OK] df_instruments: {len(df_instr)} registros")
     
     # FASE 2: CARGAR ALLOCATIONS NUEVAS (YA CON DOMINANCIA)
     print("\n[Fase 2/4] Cargando allocations nuevas...")
     df_nuevas = load_allocations_nuevas(df_instr, 'data/raw/allocations_nuevas.csv', umbral=0.9)
-    print(f"  ✓ {len(df_nuevas)} registros (formato long)")
+    print(f"  [OK] {len(df_nuevas)} registros (formato long)")
     
     # FASE 3: CARGAR ALLOCATIONS ANTIGUAS (YA CON DOMINANCIA)
     print("\n[Fase 3/4] Cargando allocations antiguas...")
     df_antiguas = load_allocations_antiguas(df_instr, 'data/raw/allocations_currency.csv')
-    print(f"  ✓ {len(df_antiguas)} instrumentos procesados")
+    print(f"  [OK] {len(df_antiguas)} instrumentos procesados")
     
     # FASE 4: CREAR DF_FINAL
     print("\n[Fase 4/4] Creando df_final...")
     df_final = crear_df_final(df_instr, df_nuevas, df_antiguas)
-    print(f"  ✓ df_final creado con {len(df_final)} registros")
+    print(f"  [OK] df_final creado con {len(df_final)} registros")
     print(f"  Columnas: {df_final.columns.tolist()}")
     
     # ESTADÍSTICAS

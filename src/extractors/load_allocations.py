@@ -285,7 +285,7 @@ def _cargar_archivo_nuevas(nuevas_path):
     if 'classif' in df.columns:
         df = df[df['classif'] == 'currency'].copy()
     else:
-        print("  ⚠️  ADVERTENCIA: columna 'classif' no encontrada, se incluyen todos los registros.")
+        print("  [WARN] ADVERTENCIA: columna 'classif' no encontrada, se incluyen todos los registros.")
     
     # Normalizar percentage (pueden venir con coma como decimal)
     if 'percentage' in df.columns:
@@ -477,7 +477,7 @@ def load_allocations_nuevas(df_instruments, nuevas_path, umbral=0.9):
     df_nuevas = _cargar_archivo_nuevas(nuevas_path)
     
     if df_nuevas.empty:
-        print("  ⚠️  ADVERTENCIA: No se pudieron cargar allocations nuevas.")
+        print("  [WARN] ADVERTENCIA: No se pudieron cargar allocations nuevas.")
         return pd.DataFrame(columns=['ID', 'Nombre', 'instrument', 'class', 'percentage', 'date',
                                     'moneda_nueva', 'pct_dominancia_nuevo', 'pct_escalado', 'pct_original'])
     
@@ -485,7 +485,7 @@ def load_allocations_nuevas(df_instruments, nuevas_path, umbral=0.9):
     df_merged = _cruzar_con_instruments(df_instruments, df_nuevas)
     
     if df_merged.empty:
-        print("  ⚠️  ADVERTENCIA: No se encontraron matches en allocations nuevas.")
+        print("  [WARN] ADVERTENCIA: No se encontraron matches en allocations nuevas.")
         return pd.DataFrame(columns=['ID', 'Nombre', 'instrument', 'class', 'percentage', 'date',
                                     'moneda_nueva', 'pct_dominancia_nuevo', 'pct_escalado', 'pct_original'])
     
@@ -597,6 +597,12 @@ def load_allocations_antiguas(df_instruments, antiguas_path):
     df_antiguas = pd.read_csv(antiguas_path, sep=';', encoding='latin-1', on_bad_lines='skip')
     df_antiguas.columns = df_antiguas.columns.str.strip()
     
+    # CONVERTIR ID A ENTERO (importante para el merge con df_instruments)
+    if 'ID' in df_antiguas.columns:
+        df_antiguas['ID'] = pd.to_numeric(df_antiguas['ID'], errors='coerce').astype('Int64')
+        # Eliminar filas con ID inválido
+        df_antiguas = df_antiguas.dropna(subset=['ID'])
+    
     # PASO 2: PREPARAR COLUMNAS BASE
     base_cols = ['ID', 'Nombre']
     if 'SubMoneda' in df_instruments.columns:
@@ -620,7 +626,7 @@ def load_allocations_antiguas(df_instruments, antiguas_path):
     cols_moneda = _identificar_columnas_moneda(df_result, base_cols)
     
     if not cols_moneda:
-        print("  ⚠️  ADVERTENCIA: No se encontraron columnas de moneda en allocations antiguas.")
+        print("  [WARN] ADVERTENCIA: No se encontraron columnas de moneda en allocations antiguas.")
         df_result['Pct_dominancia'] = "Sin datos"
         return df_result[base_cols + ['Pct_dominancia']]
     
@@ -663,7 +669,7 @@ if __name__ == "__main__":
     # FASE 1: CARGAR DF_INSTRUMENTS
     print("\n[Fase 1/3] Cargando df_instruments...")
     df_instr = load_df_instruments('data/raw/posiciones.csv', 'data/raw/instruments.csv')
-    print(f"  ✓ {len(df_instr)} instrumentos cargados")
+    print(f"  [OK] {len(df_instr)} instrumentos cargados")
     print(f"  Columnas: {df_instr.columns.tolist()}")
     
     # FASE 2: CARGAR ALLOCATIONS NUEVAS
@@ -671,8 +677,8 @@ if __name__ == "__main__":
     print("[Fase 2/3] Cargando allocations NUEVAS...")
     print("-"*70)
     df_nuevas = load_allocations_nuevas(df_instr, 'data/raw/allocations_nuevas.csv', umbral=0.9)
-    print(f"  ✓ {len(df_nuevas)} registros (formato long con dominancia)")
-    print(f"  ✓ Columnas generadas: {df_nuevas.columns.tolist()}")
+    print(f"  [OK] {len(df_nuevas)} registros (formato long con dominancia)")
+    print(f"  [OK] Columnas generadas: {df_nuevas.columns.tolist()}")
     
     # Estadísticas de clasificación
     if 'ID' in df_nuevas.columns:
@@ -711,8 +717,8 @@ if __name__ == "__main__":
     print("[Fase 3/3] Cargando allocations ANTIGUAS...")
     print("-"*70)
     df_antiguas = load_allocations_antiguas(df_instr, 'data/raw/allocations_currency.csv')
-    print(f"  ✓ {len(df_antiguas)} instrumentos procesados")
-    print(f"  ✓ Columnas generadas: {df_antiguas.columns.tolist()}")
+    print(f"  [OK] {len(df_antiguas)} instrumentos procesados")
+    print(f"  [OK] Columnas generadas: {df_antiguas.columns.tolist()}")
     
     # Estadísticas
     if 'Pct_dominancia' in df_antiguas.columns:

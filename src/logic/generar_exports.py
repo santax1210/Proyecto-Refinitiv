@@ -320,22 +320,22 @@ if __name__ == "__main__":
     # FASE 1: CARGAR DATOS BASE
     print("\n[Fase 1/4] Cargando datos base...")
     df_instr = load_df_instruments('data/raw/posiciones.csv', 'data/raw/instruments.csv')
-    print(f"  ✓ df_instruments: {len(df_instr)} registros")
+    print(f"  [OK] df_instruments: {len(df_instr)} registros")
     
     # FASE 2: CARGAR ALLOCATIONS NUEVAS
     print("\n[Fase 2/4] Cargando allocations nuevas...")
     df_nuevas = load_allocations_nuevas(df_instr, 'data/raw/allocations_nuevas.csv', umbral=0.9)
-    print(f"  ✓ {len(df_nuevas)} registros (formato long)")
+    print(f"  [OK] {len(df_nuevas)} registros (formato long)")
     
     # FASE 3: CARGAR ALLOCATIONS ANTIGUAS
     print("\n[Fase 3/4] Cargando allocations antiguas...")
     df_antiguas = load_allocations_antiguas(df_instr, 'data/raw/allocations_currency.csv')
-    print(f"  ✓ {len(df_antiguas)} instrumentos procesados")
+    print(f"  [OK] {len(df_antiguas)} instrumentos procesados")
     
     # FASE 4: CREAR DF_FINAL
     print("\n[Fase 4/4] Creando df_final...")
     df_final = crear_df_final(df_instr, df_nuevas, df_antiguas)
-    print(f"  ✓ df_final creado con {len(df_final)} registros")
+    print(f"  [OK] df_final creado con {len(df_final)} registros")
     
     # GENERACIÓN DE EXPORTS
     print("\n" + "="*70)
@@ -344,12 +344,12 @@ if __name__ == "__main__":
     
     print("\n[Export 1/2] Generando export de balanceados...")
     export_balanceados = generar_export_balanceados(df_final, df_nuevas, df_instr, df_antiguas)
-    print(f"  ✓ {len(export_balanceados)} registros")
+    print(f"  [OK] {len(export_balanceados)} registros")
     print(f"  Columnas: {list(export_balanceados.columns)}")
     
     print("\n[Export 2/2] Generando export de no balanceados...")
     export_no_balanceados = generar_export_no_balanceados(df_final)
-    print(f"  ✓ {len(export_no_balanceados)} registros")
+    print(f"  [OK] {len(export_no_balanceados)} registros")
     print(f"  Columnas: {list(export_no_balanceados.columns)}")
     
     # GUARDAR EXPORTS

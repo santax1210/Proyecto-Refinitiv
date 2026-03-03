@@ -136,37 +136,37 @@ def main():
         # Guardar en exports (para usuario final)
         print("\n[3.2] Guardando archivos de exportación final...")
         
-        resultados['export_balanceados'].to_csv(
+        resultados['exports']['balanceados'].to_csv(
             'data/exports/export_balanceados.csv',
             index=False,
             sep=';',
             encoding='latin-1'
         )
-        print(f"  [OK] data/exports/export_balanceados.csv ({len(resultados['export_balanceados'])} registros)")
+        print(f"  [OK] data/exports/export_balanceados.csv ({len(resultados['exports']['balanceados'])} registros)")
         
-        resultados['export_no_balanceados'].to_csv(
+        resultados['exports']['no_balanceados'].to_csv(
             'data/exports/export_no_balanceados.csv',
             index=False,
             sep=';',
             encoding='latin-1'
         )
-        print(f"  [OK] data/exports/export_no_balanceados.csv ({len(resultados['export_no_balanceados'])} registros)")
+        print(f"  [OK] data/exports/export_no_balanceados.csv ({len(resultados['exports']['no_balanceados'])} registros)")
         
-        resultados['df_con_cambios'].to_csv(
+        resultados['exports']['con_cambios'].to_csv(
             'data/exports/export_con_cambios.csv',
             index=False,
             sep=';',
             encoding='latin-1'
         )
-        print(f"  [OK] data/exports/export_con_cambios.csv ({len(resultados['df_con_cambios'])} registros)")
+        print(f"  [OK] data/exports/export_con_cambios.csv ({len(resultados['exports']['con_cambios'])} registros)")
         
-        resultados['export_sin_datos'].to_csv(
+        resultados['exports']['sin_datos'].to_csv(
             'data/exports/export_sin_datos.csv',
             index=False,
             sep=';',
             encoding='latin-1'
         )
-        print(f"  [OK] data/exports/export_sin_datos.csv ({len(resultados['export_sin_datos'])} registros)")
+        print(f"  [OK] data/exports/export_sin_datos.csv ({len(resultados['exports']['sin_datos'])} registros)")
         
         # RESUMEN FINAL
         print("\n" + "="*80)
@@ -175,10 +175,10 @@ def main():
         
         df_final = resultados['df_final']
         total = len(df_final)
-        balanceados = len(resultados['export_balanceados'])
-        no_balanceados = len(resultados['export_no_balanceados'])
-        con_cambios = len(resultados['df_con_cambios'])
-        sin_datos = len(resultados['export_sin_datos'])
+        balanceados = len(resultados['exports']['balanceados'])
+        no_balanceados = len(resultados['exports']['no_balanceados'])
+        con_cambios = len(resultados['exports']['con_cambios'])
+        sin_datos = len(resultados['exports']['sin_datos'])
         
         print(f"\n📊 Total de instrumentos procesados:    {total}")
         print(f"⚖️  Instrumentos balanceados:            {balanceados} ({balanceados/total*100:.1f}%)")

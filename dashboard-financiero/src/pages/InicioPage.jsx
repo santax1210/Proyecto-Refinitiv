@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import FileUploader from '../components/FileUploader';
+import { useApp } from '../context/AppContext';
 
 const TEAL = '#299D91';
 const BORDER = '#DDE3E6';
@@ -8,6 +9,57 @@ const CLASIFICACIONES = ['Moneda', 'Región', 'Industria'];
 export default function InicioPage() {
     const [clasificacion, setClasificacion] = useState('');
     const [attached, setAttached] = useState([]);
+    const [files, setFiles] = useState({});
+    const [processing, setProcessing] = useState(false);
+    const [error, setError] = useState(null);
+    
+    const { uploadAndProcess, processingState } = useApp();
+
+    // Manejar archivos adjuntos desde FileUploader
+    const handleAttach = (attachedFiles) => {
+        setAttached(attachedFiles);
+        
+        // Mapear archivos a los nombres esperados por el backend
+        // Este mapeo depende de cómo FileUploader maneja los archivos
+        const fileMap = {};
+        attachedFiles.forEach(file => {
+            // Los archivos deben tener un nombre específico esperado por el backend
+            const fileName = file.name.toLowerCase();
+            if (fileName.includes('posiciones')) {
+                fileMap.posiciones = file;
+            } else if (fileName.includes('instruments')) {
+                fileMap.instruments = file;
+            } else if (fileName.includes('nuevas')) {
+                fileMap.allocations_nuevas = file;
+            } else if (fileName.includes('currency') || fileName.includes('antiguas')) {
+                fileMap.allocations_antiguas = file;
+            }
+        });
+        setFiles(fileMap);
+    };
+
+    // Procesar archivos
+    const handleProcess = async () => {
+        if (Object.keys(files).length === 0) {
+            setError('Debes subir al menos un archivo');
+            return;
+        }
+
+        setProcessing(true);
+        setError(null);
+
+        try {
+            await uploadAndProcess(files);
+            // Éxito - el estado se maneja en el context
+        } catch (err) {
+            console.error('Error completo:', err);
+            const errorMsg = err.message || 'Error al procesar archivos';
+            setError(errorMsg);
+            console.log('Error mostrado al usuario:', errorMsg);
+        } finally {
+            setProcessing(false);
+        }
+    };
 
     return (
         <div style={{
@@ -115,11 +167,81 @@ export default function InicioPage() {
 
                     {/* FileUploader */}
                     <div style={{ flex: 1 }}>
-                        <FileUploader onAttach={setAttached} />
+                        <FileUploader onAttach={handleAttach} />
                     </div>
 
+                    {/* Estado de procesamiento */}
+                    {processing && (
+                        <div style={{
+                            display: 'flex', flexDirection: 'column', gap: 8,
+                            padding: '12px 16px', borderRadius: 12,
+                            backgroundColor: processingState.status === 'error' ? '#FEE2E2' : '#F3F6F8',
+                            border: `1px solid ${processingState.status === 'error' ? '#FCA5A5' : BORDER}`,
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                {processingState.status !== 'error' ? (
+                                    <div style={{ 
+                                        width: 16, height: 16, 
+                                        border: '2px solid ' + TEAL, 
+                                        borderTopColor: 'transparent',
+                                        borderRadius: '50%',
+                                        animation: 'spin 1s linear infinite'
+                                    }} />
+                                ) : (
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#991B1B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <circle cx="12" cy="12" r="10" />
+                                        <line x1="15" y1="9" x2="9" y2="15" />
+                                        <line x1="9" y1="9" x2="15" y2="15" />
+                                    </svg>
+                                )}
+                                <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: processingState.status === 'error' ? '#991B1B' : '#525256' }}>
+                                    {processingState.message || 'Procesando...'}
+                                </p>
+                            </div>
+                            {processingState.progress > 0 && processingState.status !== 'error' && (
+                                <div style={{ height: 4, borderRadius: 2, backgroundColor: '#E8EAED', overflow: 'hidden' }}>
+                                    <div style={{ 
+                                        height: '100%', 
+                                        width: `${processingState.progress}%`, 
+                                        backgroundColor: TEAL, 
+                                        transition: 'width 0.3s' 
+                                    }} />
+                                </div>
+                            )}
+                            {processingState.error && (
+                                <p style={{ margin: 0, fontSize: 11, color: '#991B1B', lineHeight: 1.4 }}>
+                                    {processingState.error}
+                                </p>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Error */}
+                    {error && (
+                        <div style={{
+                            padding: '12px 16px', borderRadius: 12,
+                            backgroundColor: '#FEE2E2', border: '1px solid #FCA5A5',
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#991B1B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 2 }}>
+                                    <circle cx="12" cy="12" r="10" />
+                                    <line x1="12" y1="8" x2="12" y2="12" />
+                                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                                </svg>
+                                <div style={{ flex: 1 }}>
+                                    <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#991B1B', marginBottom: 4 }}>
+                                        Error al procesar
+                                    </p>
+                                    <p style={{ margin: 0, fontSize: 11, color: '#991B1B', lineHeight: 1.4, whiteSpace: 'pre-wrap' }}>
+                                        {error}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Banner de éxito */}
-                    {attached.length > 0 && (
+                    {attached.length > 0 && !processing && (
                         <div style={{
                             display: 'flex', alignItems: 'center', gap: 12,
                             padding: '12px 16px', borderRadius: 12,
@@ -130,11 +252,29 @@ export default function InicioPage() {
                                     <polyline points="20 6 9 17 4 12" />
                                 </svg>
                             </div>
-                            <div>
+                            <div style={{ flex: 1 }}>
                                 <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#1a7a70' }}>
-                                    {attached.length} archivo{attached.length > 1 ? 's' : ''} listo{attached.length > 1 ? 's' : ''} — pasá a Validación
+                                    {attached.length} archivo{attached.length > 1 ? 's' : ''} listo{attached.length > 1 ? 's' : ''}
                                 </p>
                             </div>
+                            <button
+                                onClick={handleProcess}
+                                disabled={processing}
+                                style={{
+                                    padding: '6px 14px',
+                                    borderRadius: 8,
+                                    border: 'none',
+                                    backgroundColor: TEAL,
+                                    color: '#FFFFFF',
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    cursor: processing ? 'not-allowed' : 'pointer',
+                                    opacity: processing ? 0.6 : 1,
+                                    transition: 'opacity 0.2s',
+                                }}
+                            >
+                                Procesar
+                            </button>
                         </div>
                     )}
                 </div>

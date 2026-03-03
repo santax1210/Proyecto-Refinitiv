@@ -8,6 +8,7 @@ import CategorySection from './components/CategorySection';
 import InicioPage from './pages/InicioPage';
 import ValidacionPage from './pages/ValidacionPage';
 import VisualizacionPage from './pages/VisualizacionPage';
+import { AppProvider } from './context/AppContext';
 
 /* ── Página de placeholder para secciones aún no construidas ── */
 function PlaceholderPage({ name }) {
@@ -63,14 +64,16 @@ export default function App() {
   const [selectedInstrumentId, setSelectedInstrumentId] = useState(23);
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar activePage={activePage} onNavigate={setActivePage} />
-      <MainContent
-        activePage={activePage}
-        onNavigate={setActivePage}
-        selectedId={selectedInstrumentId}
-        onSelect={setSelectedInstrumentId}
-      />
-    </div>
+    <AppProvider>
+      <div className="flex h-screen overflow-hidden">
+        <Sidebar activePage={activePage} onNavigate={setActivePage} />
+        <MainContent
+          activePage={activePage}
+          onNavigate={setActivePage}
+          selectedId={selectedInstrumentId}
+          onSelect={setSelectedInstrumentId}
+        />
+      </div>
+    </AppProvider>
   );
 }

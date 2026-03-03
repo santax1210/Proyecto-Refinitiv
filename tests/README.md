@@ -179,6 +179,45 @@ python tests/test_pipeline_completo.py
 
 ---
 
+### 8. **test_backend_frontend_integration.py** - Integración Backend-Frontend
+**Objetivo:** Validar que los datos se pasen correctamente desde el backend (Python/Flask) al frontend (React/JSON).
+
+**Valida:**
+
+#### Estructura de Resultados:
+- ✅ `ejecutar_pipeline_completo()` retorna todas las claves esperadas
+- ✅ Clave `exports` contiene: balanceados, no_balanceados, con_cambios, sin_datos
+- ✅ Estructura de resultados coincide con lo que el endpoint `/api/results/validation` espera
+
+#### Columnas de df_final:
+- ✅ Todas las columnas críticas presentes: ID, Nombre, moneda_nueva, Pct_dominancia, Cambio, Estado
+- ✅ Columnas disponibles para la tabla de validación en el frontend
+
+#### Serialización JSON:
+- ✅ df_final se puede convertir a dict con `.to_dict(orient='records')`
+- ✅ Los datos se pueden serializar a JSON string (sin errores de encoding)
+- ✅ JSON deserializable correctamente
+- ✅ Tamaño del JSON razonable para transferencia HTTP
+
+#### Estructura del Summary:
+- ✅ Summary contiene: total_instrumentos, balanceados, no_balanceados, con_cambios, sin_datos
+- ✅ Summary serializable a JSON
+
+#### Validación de Valores:
+- ✅ Columna `Estado` tiene solo valores válidos: Estado_1, Estado_2, Estado_3, o vacío
+- ✅ Columna `Cambio` tiene solo valores válidos: Si, No, o vacío
+
+**Uso:**
+```bash
+python tests/test_backend_frontend_integration.py
+```
+
+**Requiere:** Pipeline ejecutado
+
+**Propósito:** Este test es crítico para asegurar que no haya errores de serialización o incompatibilidades entre el backend Python y el frontend React. Valida el contrato de datos entre ambos sistemas.
+
+---
+
 ## 🚀 Ejecutar Todos los Tests
 
 ### Opción 1: Script ejecutor maestro

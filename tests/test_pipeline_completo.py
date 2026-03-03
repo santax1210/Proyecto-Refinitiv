@@ -227,13 +227,52 @@ def test_pipeline_completo():
     # 5.4 - df_final
     print("\n[i] Validando df_final.csv...")
     try:
-        df_final = pd.read_csv('data/processed/df_final.csv', sep=';', encoding='latin-1', nrows=10)
+        df_final = pd.read_csv('data/processed/df_final.csv', sep=';', encoding='latin-1')
         print(f"    Registros: {len(df_final)}")
         print(f"    Columnas: {df_final.shape[1]}")
         
+        # VALIDACIÓN DE TIPOS DE DATOS
+        if 'ID' in df_final.columns:
+            id_dtype = df_final['ID'].dtype
+            if id_dtype in ['int64', 'Int64']:
+                print(f"    [OK] Columna 'ID' tiene tipo correcto: {id_dtype}")
+            else:
+                errores.append(f"df_final: Columna 'ID' tiene tipo incorrecto {id_dtype} (esperado: int64)")
+        
+        # VALIDACIÓN DEL MERGE - pct_dominancia_antigua debe estar poblada
+        if 'pct_dominancia_antigua' in df_final.columns:
+            valores_no_nulos = df_final['pct_dominancia_antigua'].notna().sum()
+            porcentaje_poblado = valores_no_nulos / len(df_final) * 100
+            print(f"    [OK] Columna 'pct_dominancia_antigua' existe")
+            print(f"    [i] Valores poblados: {valores_no_nulos}/{len(df_final)} ({porcentaje_poblado:.1f}%)")
+            
+            # Verificar formato correcto "MONEDA XX.XX%"
+            if valores_no_nulos > 0:
+                muestra = df_final['pct_dominancia_antigua'].dropna().head(5)
+                con_formato_correcto = df_final['pct_dominancia_antigua'].str.contains(r'^[A-Z]{2,5} \d+\.\d+%$', na=False, regex=True).sum()
+                print(f"    [i] Con formato correcto (MONEDA XX.XX%): {con_formato_correcto}")
+                print(f"    [i] Muestra: {list(muestra)}")
+                
+                if porcentaje_poblado < 50:
+                    errores.append(f"df_final: pct_dominancia_antigua tiene baja cobertura ({porcentaje_poblado:.1f}%)")
+                elif con_formato_correcto == 0:
+                    errores.append(f"df_final: pct_dominancia_antigua no tiene el formato correcto")
+                else:
+                    print(f"    [OK] pct_dominancia_antigua correctamente poblada y formateada")
+            else:
+                errores.append(f"df_final: pct_dominancia_antigua está completamente vacía (error de merge)")
+        else:
+            errores.append(f"df_final: Falta columna pct_dominancia_antigua")
+        
+        # VALIDACIÓN DE MERGE con pct_dominancia_nuevo (para comparar)
+        if 'pct_dominancia_nuevo' in df_final.columns:
+            valores_no_nulos = df_final['pct_dominancia_nuevo'].notna().sum()
+            porcentaje_poblado = valores_no_nulos / len(df_final) * 100
+            print(f"    [i] pct_dominancia_nuevo poblado: {valores_no_nulos}/{len(df_final)} ({porcentaje_poblado:.1f}%)")
+        
         # Verificar que tenga datos de ambos archivos
         tiene_nuevas = any('nueva' in str(c).lower() for c in df_final.columns)
-        tiene_antiguas = any('antigua' in str(c).lower() or 'Pct_dominancia' in c for c in df_final.columns)
+        tiene_antiguas = any('antigua' in str(c).lower() for c in df_final.columns)
         
         if tiene_nuevas and tiene_antiguas:
             print(f"    [OK] Contiene datos de allocations nuevas y antiguas")
@@ -257,15 +296,34 @@ def test_pipeline_completo():
     
     print("\n[i] Verificando integridad de datos...")
     
-    # 6.1 - Verificar que los IDs están presentes en todos los archivos
+    # 6.1 - Verificar que los IDs están presentes en todos los archivos y tienen tipos consistentes
     try:
         df_instr = pd.read_csv('data/processed/df_instruments.csv', sep=';', encoding='latin-1')
         df_nuevas = pd.read_csv('data/processed/allocations_nuevas.csv', sep=';', encoding='latin-1')
         df_antiguas = pd.read_csv('data/processed/allocations_antiguas.csv', sep=';', encoding='latin-1')
+        df_final = pd.read_csv('data/processed/df_final.csv', sep=';', encoding='latin-1')
+        
+        # VALIDACIÓN DE TIPOS DE DATOS DE ID
+        print(f"\n[i] Validando tipos de datos de columna 'ID':")
+        tipos_consistentes = True
+        for nombre, df in [("df_instruments", df_instr), ("allocations_nuevas", df_nuevas), 
+                          ("allocations_antiguas", df_antiguas), ("df_final", df_final)]:
+            id_dtype = df['ID'].dtype
+            print(f"    {nombre:25} - {id_dtype}")
+            if id_dtype not in ['int64', 'Int64']:
+                print(f"        [!] ERROR: Tipo incorrecto, esperado int64")
+                tipos_consistentes = False
+        
+        if tipos_consistentes:
+            print(f"    [OK] Todos los DataFrames tienen tipo consistente para 'ID'")
+        else:
+            print(f"    [!] ERROR: Tipos de datos inconsistentes detectados")
+            return False
         
         ids_instr = set(df_instr['ID'])
         ids_nuevas = set(df_nuevas['ID'])
         ids_antiguas = set(df_antiguas['ID'])
+        ids_final = set(df_final['ID'])
         
         print(f"\n[i] IDs por archivo:")
         print(f"    df_instruments:       {len(ids_instr)}")
