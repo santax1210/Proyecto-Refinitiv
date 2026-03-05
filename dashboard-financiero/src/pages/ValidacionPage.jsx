@@ -87,6 +87,7 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
     const [revisiones, setRevisiones] = useState({}); // { [ID]: 'Validado' | 'Rechazado' }
     const [loading, setLoading] = useState(false);
     const [downloading, setDownloading] = useState(null); // 'balanceados', 'no_balanceados', 'sin_datos', null
+    const [showGlosario, setShowGlosario] = useState(false);
     const rowsPerPage = 15;
 
     // Cargar datos al montar el componente si no están disponibles
@@ -153,8 +154,30 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
         if (allPageSel) setSelected(s => s.filter(id => !paged.some(r => r.id === id)));
         else setSelected(s => [...new Set([...s, ...paged.map(r => r.id)])]);
     };
-    const toggleRow = (id) =>
-        setSelected(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
+
+    // Toggle selección y validación
+    const toggleRow = (id) => {
+        setSelected(s => {
+            const isSel = s.includes(id);
+            const isValidado = revisiones[id] === 'Validado';
+            // El checkbox aparece marcado si está seleccionado O validado
+            const appearsChecked = isSel || isValidado;
+            if (appearsChecked) {
+                // Desmarcar: sacar de selección y quitar validación si la tenía
+                if (isValidado) {
+                    setRevisiones(prev => {
+                        const next = { ...prev };
+                        next[id] = 'Sin revisar';
+                        return next;
+                    });
+                }
+                return s.filter(x => x !== id);
+            } else {
+                return [...s, id];
+            }
+        });
+    };
+
 
     const handleValidar = () => {
         if (selected.length === 0) return;
@@ -164,6 +187,19 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
             return next;
         });
         setSelected([]);
+    };
+
+    // Validar todos los instrumentos filtrados que no estén ya validados
+    const handleValidarTodosFiltrados = () => {
+        const idsToValidate = filtered.filter(r => (revisiones[r.ID] !== 'Validado')).map(r => r.ID);
+        if (idsToValidate.length === 0) return;
+        setRevisiones(prev => {
+            const next = { ...prev };
+            idsToValidate.forEach(id => { next[id] = 'Validado'; });
+            return next;
+        });
+        // Si alguno estaba seleccionado, los quitamos de la selección
+        setSelected(sel => sel.filter(id => !idsToValidate.includes(id)));
     };
 
     const handleRechazar = () => {
@@ -215,12 +251,12 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
     };
     const PX = 32; /* padding horizontal del card/filas (pixels) */
 
-    const rowStyle = (isSel) => ({
+    const rowStyle = (isSel, revision) => ({
         display: 'flex',
         alignItems: 'center',
         padding: `11px ${PX}px`,
         gap: 0,
-        backgroundColor: isSel ? '#F0FFFE' : 'transparent',
+        backgroundColor: revision === 'Validado' ? '#E9F9F7' : revision === 'Rechazado' ? '#FFF0EE' : isSel ? '#F0FFFE' : 'transparent',
         transition: 'background-color 0.12s',
         cursor: 'pointer',
     });
@@ -228,6 +264,65 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
     return (
         /* ── Página completa ── */
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '20px 28px', width: '100%', maxWidth: '1400px', margin: '0 auto' }}>
+            {/* Modal Glosario */}
+            {showGlosario && (
+                <div
+                    onClick={() => setShowGlosario(false)}
+                    style={{ position: 'fixed', inset: 0, zIndex: 200, backgroundColor: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                >
+                    <div
+                        onClick={e => e.stopPropagation()}
+                        style={{ background: '#FFFFFF', borderRadius: 16, padding: '28px 32px', width: 560, maxWidth: '92vw', boxShadow: '0 20px 40px rgba(0,0,0,0.18)', position: 'relative' }}
+                    >
+                        {/* Cerrar */}
+                        <button onClick={() => setShowGlosario(false)} style={{ position: 'absolute', top: 16, right: 16, width: 28, height: 28, borderRadius: 8, border: 'none', backgroundColor: '#F3F4F6', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#71717A' }}
+                            onMouseEnter={e => e.currentTarget.style.backgroundColor = '#E5E7EB'}
+                            onMouseLeave={e => e.currentTarget.style.backgroundColor = '#F3F4F6'}
+                        >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                        </button>
+                        <h3 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 18px', color: '#191919' }}>Glosario de Estados</h3>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 28px' }}>
+                            {/* Balanceados */}
+                            <div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                                    <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#299D91', flexShrink: 0 }} />
+                                    <span style={{ fontWeight: 700, fontSize: 13, color: '#299D91' }}>Balanceados</span>
+                                </div>
+                                {[
+                                    { estado: 'Estado 1', titulo: 'Balanceado → Balanceado', desc: 'El instrumento ya estaba balanceado y sigue balanceado.' },
+                                    { estado: 'Estado 2', titulo: 'Moneda → Balanceado', desc: 'Tenía una moneda dominante y ahora está balanceado.' },
+                                    { estado: 'Estado 3', titulo: 'Falta Allocation', desc: 'No se encontró allocation suficiente para balancear.' },
+                                ].map(({ estado, titulo, desc }) => (
+                                    <div key={estado} style={{ marginBottom: 12, paddingLeft: 14, borderLeft: '2px solid #C5EDE9' }}>
+                                        <div style={{ fontSize: 12, fontWeight: 700, color: '#299D91', marginBottom: 1 }}>{estado}</div>
+                                        <div style={{ fontSize: 13, fontWeight: 600, color: '#191919' }}>{titulo}</div>
+                                        <div style={{ fontSize: 11, color: '#71717A', marginTop: 1 }}>{desc}</div>
+                                    </div>
+                                ))}
+                            </div>
+                            {/* No Balanceados */}
+                            <div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                                    <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#F0A050', flexShrink: 0 }} />
+                                    <span style={{ fontWeight: 700, fontSize: 13, color: '#D97706' }}>No Balanceados</span>
+                                </div>
+                                {[
+                                    { estado: 'Estado 1', titulo: 'Moneda → Misma Moneda', desc: 'Ej: USD → USD. No hubo cambio de moneda dominante.' },
+                                    { estado: 'Estado 2', titulo: 'Balanceado → Moneda', desc: 'Estaba balanceado y ahora tiene una moneda dominante.' },
+                                    { estado: 'Estado 3', titulo: 'Moneda → Otra Moneda', desc: 'Ej: USD → EUR. Cambió la moneda dominante.' },
+                                ].map(({ estado, titulo, desc }) => (
+                                    <div key={estado} style={{ marginBottom: 12, paddingLeft: 14, borderLeft: '2px solid #FFD9A8' }}>
+                                        <div style={{ fontSize: 12, fontWeight: 700, color: '#D97706', marginBottom: 1 }}>{estado}</div>
+                                        <div style={{ fontSize: 13, fontWeight: 600, color: '#191919' }}>{titulo}</div>
+                                        <div style={{ fontSize: 11, color: '#71717A', marginTop: 1 }}>{desc}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* ── Mensaje de carga ── */}
             {loading && (
@@ -292,13 +387,24 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
 
             {/* ── Encabezado ── */}
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-                <div>
-                    <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#9F9F9F', marginBottom: 4 }}>
-                        VALIDACIÓN
-                    </p>
-                    <h1 style={{ fontSize: 20, fontWeight: 700, color: '#191919', margin: 0 }}>
-                        Resultados de Allocations
-                    </h1>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div>
+                        <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#9F9F9F', marginBottom: 4 }}>
+                            VALIDACIÓN
+                        </p>
+                        <h1 style={{ fontSize: 20, fontWeight: 700, color: '#191919', margin: 0 }}>
+                            Resultados de Allocations
+                        </h1>
+                    </div>
+                    {/* Botón helper glosario */}
+                    <button
+                        onClick={() => setShowGlosario(true)}
+                        title="Ver glosario de estados"
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, borderRadius: '50%', border: '1.5px solid #DDE3E6', backgroundColor: '#F8FAFC', color: '#9F9F9F', cursor: 'pointer', fontSize: 13, fontWeight: 700, flexShrink: 0, transition: 'all 0.15s', marginTop: 16 }}
+                        onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#EBF7F6'; e.currentTarget.style.borderColor = '#299D91'; e.currentTarget.style.color = '#299D91'; }}
+                        onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#F8FAFC'; e.currentTarget.style.borderColor = '#DDE3E6'; e.currentTarget.style.color = '#9F9F9F'; }}
+                    >?
+                    </button>
                 </div>
                 <div style={{ textAlign: 'right', paddingLeft: 32, flexShrink: 0 }}>
                     <p style={{ fontSize: 11, color: '#9F9F9F', margin: '0 0 2px' }}>Instrumentos</p>
@@ -373,62 +479,82 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                         </button>
 
                         {showFilterMenu && (
-                            <div style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, zIndex: 50, width: 190, backgroundColor: '#FFFFFF', borderRadius: 12, border: '1px solid #DDE3E6', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05)', padding: '6px' }}>
-                                {/* Sección Estado */}
-                                <p style={{ margin: '6px 12px 4px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#9F9F9F' }}>Estado</p>
-                                {[null, 1, 2, 3].map((val) => (
-                                    <button
-                                        key={val === null ? 'est-all' : `est-${val}`}
-                                        onClick={() => { setFilterEstadoIdx(val); setPage(1); }}
-                                        style={{ display: 'block', width: '100%', padding: '8px 12px', textAlign: 'left', fontSize: 13, fontWeight: filterEstadoIdx === val ? 700 : 500, color: filterEstadoIdx === val ? '#299D91' : '#525256', backgroundColor: filterEstadoIdx === val ? '#F0FFFE' : 'transparent', border: 'none', borderRadius: 6, cursor: 'pointer', transition: 'background-color 0.1s' }}
-                                        onMouseEnter={e => { if (filterEstadoIdx !== val) e.currentTarget.style.backgroundColor = '#F9FAFB'; }}
-                                        onMouseLeave={e => { if (filterEstadoIdx !== val) e.currentTarget.style.backgroundColor = 'transparent'; }}
-                                    >
-                                        {val === null ? 'Todos los estados' : `Estado ${val}`}
-                                    </button>
-                                ))}
-                                {/* Divisor */}
-                                <div style={{ height: 1, backgroundColor: '#F0F0F0', margin: '6px 0' }} />
-                                {/* Sección Variación */}
-                                <p style={{ margin: '6px 12px 4px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#9F9F9F' }}>Variación</p>
-                                {[null, 'Baja', 'Alta'].map((val) => (
-                                    <button
-                                        key={val === null ? 'var-all' : `var-${val}`}
-                                        onClick={() => { setFilterVariacion(val); setPage(1); }}
-                                        style={{ display: 'block', width: '100%', padding: '8px 12px', textAlign: 'left', fontSize: 13, fontWeight: filterVariacion === val ? 700 : 500, color: filterVariacion === val ? '#299D91' : '#525256', backgroundColor: filterVariacion === val ? '#F0FFFE' : 'transparent', border: 'none', borderRadius: 6, cursor: 'pointer', transition: 'background-color 0.1s' }}
-                                        onMouseEnter={e => { if (filterVariacion !== val) e.currentTarget.style.backgroundColor = '#F9FAFB'; }}
-                                        onMouseLeave={e => { if (filterVariacion !== val) e.currentTarget.style.backgroundColor = 'transparent'; }}
-                                    >
-                                        {val === null ? 'Toda la variación' : `${val} variación`}
-                                    </button>
-                                ))}
-                                {/* Sección Revisión */}
-                                <div style={{ height: 1, backgroundColor: '#F0F0F0', margin: '6px 0' }} />
-                                <p style={{ margin: '6px 12px 4px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#9F9F9F' }}>Revisión</p>
-                                {[null, 'Validado', 'Rechazado', 'Sin revisar'].map((val) => (
-                                    <button
-                                        key={val === null ? 'rev-all' : `rev-${val}`}
-                                        onClick={() => { setFilterRevision(val); setPage(1); }}
-                                        style={{ display: 'block', width: '100%', padding: '8px 12px', textAlign: 'left', fontSize: 13, fontWeight: filterRevision === val ? 700 : 500, color: filterRevision === val ? '#299D91' : '#525256', backgroundColor: filterRevision === val ? '#F0FFFE' : 'transparent', border: 'none', borderRadius: 6, cursor: 'pointer', transition: 'background-color 0.1s' }}
-                                        onMouseEnter={e => { if (filterRevision !== val) e.currentTarget.style.backgroundColor = '#F9FAFB'; }}
-                                        onMouseLeave={e => { if (filterRevision !== val) e.currentTarget.style.backgroundColor = 'transparent'; }}
-                                    >
-                                        {val === null ? 'Todas las revisiones' : val}
-                                    </button>
-                                ))}
-                                {/* Botón limpiar todo */}
+                            <div style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, zIndex: 50, backgroundColor: '#FFFFFF', borderRadius: 14, border: '1px solid #DDE3E6', boxShadow: '0 12px 24px -4px rgba(0,0,0,0.12), 0 4px 8px -2px rgba(0,0,0,0.06)', padding: '16px 18px 14px', minWidth: 460 }}>
+                                {/* Tres columnas en horizontal */}
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0 24px' }}>
+                                    {/* Columna Estado */}
+                                    <div>
+                                        <p style={{ margin: '0 0 8px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#9F9F9F' }}>Estado</p>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                            {[null, 1, 2, 3].map(val => {
+                                                const active = filterEstadoIdx === val;
+                                                const chipColors = { 1: { bg: '#EBF7F6', color: '#299D91', activeBg: '#299D91' }, 2: { bg: '#FFF7ED', color: '#D97706', activeBg: '#F0A050' }, 3: { bg: '#FFF0EE', color: '#D94A38', activeBg: '#D94A38' } };
+                                                const cc = val ? chipColors[val] : null;
+                                                return (
+                                                    <button key={val ?? 'est-all'} onClick={() => { setFilterEstadoIdx(val); setPage(1); }}
+                                                        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderRadius: 8, fontSize: 12, fontWeight: active ? 700 : 500, cursor: 'pointer', border: `1px solid ${active && cc ? cc.activeBg : active ? '#299D91' : '#E8E8E8'}`, backgroundColor: active ? (cc ? cc.activeBg : '#299D91') : '#FAFAFA', color: active ? '#FFFFFF' : (cc ? cc.color : '#525256'), transition: 'all 0.12s', textAlign: 'left', width: '100%' }}
+                                                        onMouseEnter={e => { if (!active) { e.currentTarget.style.backgroundColor = cc ? cc.bg : '#F0F9FF'; e.currentTarget.style.borderColor = cc ? cc.activeBg : '#299D91'; } }}
+                                                        onMouseLeave={e => { if (!active) { e.currentTarget.style.backgroundColor = '#FAFAFA'; e.currentTarget.style.borderColor = '#E8E8E8'; } }}
+                                                    >
+                                                        {val === null ? 'Todos' : `Estado ${val}`}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                    {/* Columna Variación */}
+                                    <div>
+                                        <p style={{ margin: '0 0 8px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#9F9F9F' }}>Variación</p>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                            {[null, 'Baja', 'Alta'].map(val => {
+                                                const active = filterVariacion === val;
+                                                const varColors = { 'Baja': { bg: '#EBF7F6', color: '#299D91', activeBg: '#299D91' }, 'Alta': { bg: '#FFF0EE', color: '#D94A38', activeBg: '#D94A38' } };
+                                                const cc = val ? varColors[val] : null;
+                                                return (
+                                                    <button key={val ?? 'var-all'} onClick={() => { setFilterVariacion(val); setPage(1); }}
+                                                        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderRadius: 8, fontSize: 12, fontWeight: active ? 700 : 500, cursor: 'pointer', border: `1px solid ${active && cc ? cc.activeBg : active ? '#299D91' : '#E8E8E8'}`, backgroundColor: active ? (cc ? cc.activeBg : '#299D91') : '#FAFAFA', color: active ? '#FFFFFF' : (cc ? cc.color : '#525256'), transition: 'all 0.12s', textAlign: 'left', width: '100%' }}
+                                                        onMouseEnter={e => { if (!active) { e.currentTarget.style.backgroundColor = cc ? cc.bg : '#F0F9FF'; e.currentTarget.style.borderColor = cc ? cc.activeBg : '#299D91'; } }}
+                                                        onMouseLeave={e => { if (!active) { e.currentTarget.style.backgroundColor = '#FAFAFA'; e.currentTarget.style.borderColor = '#E8E8E8'; } }}
+                                                    >
+                                                        {val === null ? 'Todas' : val}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                    {/* Columna Revisión */}
+                                    <div>
+                                        <p style={{ margin: '0 0 8px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#9F9F9F' }}>Revisión</p>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                            {[null, 'Validado', 'Rechazado', 'Sin revisar'].map(val => {
+                                                const active = filterRevision === val;
+                                                const revColors = { 'Validado': { bg: '#EBF7F6', color: '#299D91', activeBg: '#299D91' }, 'Rechazado': { bg: '#FFF0EE', color: '#D94A38', activeBg: '#D94A38' }, 'Sin revisar': { bg: '#F3F4F6', color: '#71717A', activeBg: '#71717A' } };
+                                                const cc = val ? revColors[val] : null;
+                                                return (
+                                                    <button key={val ?? 'rev-all'} onClick={() => { setFilterRevision(val); setPage(1); }}
+                                                        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderRadius: 8, fontSize: 12, fontWeight: active ? 700 : 500, cursor: 'pointer', border: `1px solid ${active && cc ? cc.activeBg : active ? '#299D91' : '#E8E8E8'}`, backgroundColor: active ? (cc ? cc.activeBg : '#299D91') : '#FAFAFA', color: active ? '#FFFFFF' : (cc ? cc.color : '#525256'), transition: 'all 0.12s', textAlign: 'left', width: '100%' }}
+                                                        onMouseEnter={e => { if (!active) { e.currentTarget.style.backgroundColor = cc ? cc.bg : '#F0F9FF'; e.currentTarget.style.borderColor = cc ? cc.activeBg : '#299D91'; } }}
+                                                        onMouseLeave={e => { if (!active) { e.currentTarget.style.backgroundColor = '#FAFAFA'; e.currentTarget.style.borderColor = '#E8E8E8'; } }}
+                                                    >
+                                                        {val === null ? 'Todas' : val}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                </div>
+                                {/* Footer: limpiar filtros */}
                                 {(filterEstadoIdx || filterVariacion || filterRevision) && (
-                                    <>
-                                        <div style={{ height: 1, backgroundColor: '#F0F0F0', margin: '6px 0' }} />
+                                    <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #F0F0F0', display: 'flex', justifyContent: 'flex-end' }}>
                                         <button
                                             onClick={() => { setFilterEstadoIdx(null); setFilterVariacion(null); setFilterRevision(null); setShowFilterMenu(false); setPage(1); }}
-                                            style={{ display: 'block', width: '100%', padding: '8px 12px', textAlign: 'left', fontSize: 13, fontWeight: 500, color: '#D94A38', backgroundColor: 'transparent', border: 'none', borderRadius: 6, cursor: 'pointer', transition: 'background-color 0.1s' }}
-                                            onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#FFF5F5'; }}
+                                            style={{ padding: '6px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, color: '#D94A38', backgroundColor: 'transparent', border: '1px solid #D94A38', cursor: 'pointer', transition: 'all 0.12s' }}
+                                            onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#FFF0EE'; }}
                                             onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; }}
                                         >
                                             Limpiar filtros
                                         </button>
-                                    </>
+                                    </div>
                                 )}
                             </div>
                         )}
@@ -448,29 +574,44 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                     </div>
 
                     {/* Acciones — no encogen */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
+                        <button
+                            onClick={handleValidar}
+                            disabled={selCount === 0}
+                            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 20px', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: selCount === 0 ? 'default' : 'pointer', border: 'none', backgroundColor: '#299D91', color: '#FFFFFF', flexShrink: 0, transition: 'all 0.15s', opacity: selCount === 0 ? 0.45 : 1 }}
+                            onMouseEnter={e => { if (selCount > 0) e.currentTarget.style.backgroundColor = '#22857a'; }}
+                            onMouseLeave={e => e.currentTarget.style.backgroundColor = '#299D91'}
+                        >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                            {selCount > 0 ? `Validar (${selCount})` : 'Validar'}
+                        </button>
+                        <button
+                            onClick={handleRechazar}
+                            disabled={selCount === 0}
+                            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 20px', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: selCount === 0 ? 'default' : 'pointer', border: 'none', backgroundColor: '#D94A38', color: '#FFFFFF', flexShrink: 0, transition: 'all 0.15s', opacity: selCount === 0 ? 0.45 : 1, marginLeft: 8 }}
+                            onMouseEnter={e => { if (selCount > 0) e.currentTarget.style.backgroundColor = '#b83c2d'; }}
+                            onMouseLeave={e => e.currentTarget.style.backgroundColor = '#D94A38'}
+                        >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                            </svg>
+                            {selCount > 0 ? `Rechazar (${selCount})` : 'Rechazar'}
+                        </button>
+                    </div>
                     <button
-                        onClick={handleValidar}
-                        disabled={selCount === 0}
-                        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 20px', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: selCount === 0 ? 'default' : 'pointer', border: 'none', backgroundColor: '#299D91', color: '#FFFFFF', flexShrink: 0, transition: 'all 0.15s', opacity: selCount === 0 ? 0.45 : 1 }}
-                        onMouseEnter={e => { if (selCount > 0) e.currentTarget.style.backgroundColor = '#22857a'; }}
-                        onMouseLeave={e => e.currentTarget.style.backgroundColor = '#299D91'}
+                        onClick={handleValidarTodosFiltrados}
+                        disabled={filtered.filter(r => revisiones[r.ID] !== 'Validado').length === 0}
+                        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 20px', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: filtered.filter(r => revisiones[r.ID] !== 'Validado').length === 0 ? 'default' : 'pointer', border: 'none', backgroundColor: '#1e7c72', color: '#FFFFFF', flexShrink: 0, transition: 'all 0.15s', opacity: filtered.filter(r => revisiones[r.ID] !== 'Validado').length === 0 ? 0.45 : 1, marginLeft: 32 }}
+                        title="Validar todos los instrumentos filtrados"
+                        onMouseEnter={e => { if (filtered.filter(r => revisiones[r.ID] !== 'Validado').length > 0) e.currentTarget.style.backgroundColor = '#17635b'; }}
+                        onMouseLeave={e => e.currentTarget.style.backgroundColor = '#1e7c72'}
                     >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 2 }}>
                             <polyline points="20 6 9 17 4 12" />
                         </svg>
-                        {selCount > 0 ? `Validar (${selCount})` : 'Validar'}
-                    </button>
-                    <button
-                        onClick={handleRechazar}
-                        disabled={selCount === 0}
-                        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 20px', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: selCount === 0 ? 'default' : 'pointer', border: 'none', backgroundColor: '#D94A38', color: '#FFFFFF', flexShrink: 0, transition: 'all 0.15s', opacity: selCount === 0 ? 0.45 : 1 }}
-                        onMouseEnter={e => { if (selCount > 0) e.currentTarget.style.backgroundColor = '#b83c2d'; }}
-                        onMouseLeave={e => e.currentTarget.style.backgroundColor = '#D94A38'}
-                    >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                        </svg>
-                        {selCount > 0 ? `Rechazar (${selCount})` : 'Rechazar'}
+                        Validar todos filtrados
                     </button>
                 </div>
 
@@ -499,17 +640,22 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                     </div>
                 ) : paged.map((row, idx) => {
                     const isSel = selected.includes(row.ID);
+                    const revision = revisiones[row.ID] || null;
+                    const isValidado = revision === 'Validado';
+                    const isRechazado = revision === 'Rechazado';
+                    const hoverBg = isValidado ? '#D4F4F0' : isRechazado ? '#FFE4E0' : '#E2E8F0';
+                    const restBg = isValidado ? '#E9F9F7' : isRechazado ? '#FFF0EE' : isSel ? '#F0FFFE' : 'transparent';
                     return (
                         <div
                             key={row.ID}
-                            style={{ ...rowStyle(isSel), ...(idx < paged.length - 1 ? { borderBottom: '1px solid #F5F5F5' } : {}) }}
-                            onMouseEnter={e => { if (!isSel) e.currentTarget.style.backgroundColor = '#E2E8F0'; }}
-                            onMouseLeave={e => { e.currentTarget.style.backgroundColor = isSel ? '#F0FFFE' : 'transparent'; }}
+                            style={{ ...rowStyle(isSel, revision), ...(idx < paged.length - 1 ? { borderBottom: `1px solid ${isValidado ? '#C5EDE9' : isRechazado ? '#FFD8D3' : '#F5F5F5'}` } : {}) }}
+                            onMouseEnter={e => { e.currentTarget.style.backgroundColor = hoverBg; }}
+                            onMouseLeave={e => { e.currentTarget.style.backgroundColor = restBg; }}
                             onClick={() => { onSelect(row.ID); onNavigate('visualizacion'); }}
                         >
                             {/* Checkbox */}
                             <div style={{ width: COL.check, flexShrink: 0, marginRight: 12 }} onClick={(e) => { e.stopPropagation(); toggleRow(row.ID); }}>
-                                <input type="checkbox" readOnly checked={isSel} style={{ width: 15, height: 15, cursor: 'pointer', accentColor: '#299D91' }} />
+                                <input type="checkbox" readOnly checked={isSel || isValidado} style={{ width: 15, height: 15, cursor: 'pointer', accentColor: isRechazado ? '#D94A38' : '#299D91' }} />
                             </div>
 
                             {/* Expand */}
