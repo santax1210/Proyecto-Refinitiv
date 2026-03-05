@@ -328,31 +328,40 @@ def extraer_moneda_dominante(row, columna):
 
 def obtener_pct_moneda_en_nuevas(df_nuevas, instrument_id, moneda):
     """
-    Obtiene el porcentaje de una moneda específica en las allocations nuevas.
-    
+    Obtiene el porcentaje ESCALADO de una moneda específica en las allocations nuevas.
+
+    Escala los porcentajes crudos dividiéndolos por la suma total del instrumento,
+    para que sean comparables con pct_dominancia_antigua (que ya está en escala 0-100%).
+
     Parámetros:
         df_nuevas: DataFrame con allocations nuevas (formato long)
         instrument_id: ID del instrumento
         moneda: Nombre de la moneda a buscar (ej: 'CLP')
-    
+
     Retorna:
-        float: Porcentaje (0-100). Retorna 0.0 si el instrumento existe pero
+        float: Porcentaje escalado (0-100). Retorna 0.0 si el instrumento existe pero
                la moneda no está en la nueva distribución. None si el instrumento
                no existe.
     """
     df_inst = df_nuevas[df_nuevas['ID'] == instrument_id]
-    
+
     if df_inst.empty:
         return None
-    
+
+    # Calcular suma total usando solo porcentajes positivos (igual que _escalar_porcentajes)
+    # Ignorar negativos/cero para evitar totales distorsionados por posiciones cortas
+    pct_series = pd.to_numeric(df_inst['percentage'], errors='coerce')
+    total = pct_series[pct_series > 0].sum()
+
     for _, fila in df_inst.iterrows():
         if 'class' in fila:
             clase = str(fila['class']).strip().upper()
             if clase == moneda.upper():
                 porcentaje = pd.to_numeric(fila['percentage'], errors='coerce')
-                if pd.notna(porcentaje):
-                    return porcentaje
-    
+                if pd.notna(porcentaje) and total > 0:
+                    # Escalar al 100% para comparar con pct_dominancia_antigua
+                    return round(porcentaje / total * 100, 4)
+
     # El instrumento existe en nuevas pero la moneda ya no aparece → 0%
     return 0.0
 
@@ -527,12 +536,19 @@ def crear_df_final(df_instruments, df_dominancia_nuevas, df_dominancia_antiguas)
         axis=1
     )
     
-    # 9. Reordenar columnas para presentación
+    # 9. CALCULAR NIVEL DE VARIACIÓN (para filtros en frontend)
+    # Igual que 'Estado', se calcula en el backend y el frontend solo filtra sobre el valor.
+    # Hellinger (balanceados): Baja ≤ 0.30, Alta > 0.30
+    # Porcentual (no balanceados): Baja ≤ 0.40, Alta > 0.40
+    # Sin datos: None
+    df_final['nivel_variacion'] = df_final.apply(calcular_nivel_variacion, axis=1)
+
+    # 10. Reordenar columnas para presentación
     cols_orden = [
         'Nombre', 'ID', 'Tipo instrumento', 'moneda_antigua',
         'moneda_nueva', 'pct_dominancia_nuevo', 'pct_escalado', 'pct_original',
-        'pct_dominancia_antigua', 'Cambio', 'Estado', 'distancia_hellinger', 
-        'variacion_balanceados', 'variacion_no_balanceados'
+        'pct_dominancia_antigua', 'Cambio', 'Estado', 'nivel_variacion',
+        'distancia_hellinger', 'variacion_balanceados', 'variacion_no_balanceados'
     ]
     
     # Seleccionar solo las que existen
@@ -540,6 +556,35 @@ def crear_df_final(df_instruments, df_dominancia_nuevas, df_dominancia_antiguas)
     df_final = df_final[cols_finales]
     
     return df_final
+
+
+def calcular_nivel_variacion(row):
+    """
+    Clasifica el nivel de variación de un instrumento como 'Alta', 'Baja' o None.
+
+    Umbrales según el tipo de métrica usada:
+    - Hellinger (balanceados Estado_1: Bal→Bal):
+        Baja: <= 0.30  |  Alta: > 0.30
+    - Porcentual (balanceados Estado_2: Mon→Bal  +  todos los no balanceados):
+        Baja: <= 0.40  |  Alta: > 0.40
+    - Sin datos (ninguna variación calculada): None
+    """
+    val_bal = row.get('variacion_balanceados')
+    val_nobal = row.get('variacion_no_balanceados')
+    estado = str(row.get('Estado', '')).strip()
+
+    if pd.notna(val_bal) and val_bal is not None:
+        val = float(val_bal)
+        if estado == 'Estado_1':
+            # Hellinger (Balanceado → Balanceado)
+            return 'Baja' if val <= 0.30 else 'Alta'
+        else:
+            # Estado_2 (Moneda → Balanceado): variación porcentual
+            return 'Baja' if val <= 0.40 else 'Alta'
+    elif pd.notna(val_nobal) and val_nobal is not None:
+        # No balanceados: siempre variación porcentual
+        return 'Baja' if float(val_nobal) <= 0.40 else 'Alta'
+    return None
 
 
 def detectar_cambio(row):

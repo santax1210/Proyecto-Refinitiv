@@ -190,13 +190,22 @@ def _escalar_porcentajes(grupo_monedas):
         tuple: (DataFrame con columna 'pct_escalado', total_original)
     """
     grupo = grupo_monedas.copy()
-    total_original = grupo['percentage'].sum()
-    
+
+    # Ignorar filas con porcentaje negativo o cero para el escalado.
+    # Valores negativos representan posiciones cortas/hedging que distorsionan
+    # la suma total y pueden generar porcentajes escalados absurdos.
+    mask_positivos = grupo['percentage'] > 0
+    total_original = grupo.loc[mask_positivos, 'percentage'].sum()
+
     if total_original == 0:
         grupo['pct_escalado'] = 0.0
     else:
-        grupo['pct_escalado'] = grupo['percentage'] / total_original
-    
+        # Solo los positivos se escalan; los negativos/cero quedan en 0
+        grupo['pct_escalado'] = 0.0
+        grupo.loc[mask_positivos, 'pct_escalado'] = (
+            grupo.loc[mask_positivos, 'percentage'] / total_original
+        )
+
     return grupo, total_original
 
 

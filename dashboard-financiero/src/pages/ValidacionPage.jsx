@@ -1,19 +1,33 @@
 import { useState, useMemo, useEffect } from 'react';
 import { downloadExport, downloadFilteredExport } from '../services/apiService';
 
-// Formatea el string de pct_dominancia_antigua para mostrarlo limpio
-function formatDominanciaAntigua(value) {
+// Formatea strings de pct_dominancia ("CLP 100.00%%" → "CLP 100%")
+function formatPctDominancia(value) {
     if (!value) return '-';
-    // Ejemplo de entrada: "CLP 100.00%%" o "CLP 62.40%%"
-    // Elimina el segundo '%', los ceros innecesarios y espacios extra
-    // Busca moneda y porcentaje
     const match = String(value).match(/([A-Z]{3,})\s*([\d\.]+)%*/);
     if (!match) return value;
     const moneda = match[1];
     let pct = parseFloat(match[2]);
-    // Elimina decimales innecesarios
     pct = pct % 1 === 0 ? pct.toFixed(0) : pct.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
     return `${moneda} ${pct}%`;
+}
+
+// Formatea variacion (0-1) como porcentaje (ej: 0.1241 → "12.41%")
+function formatVariacion(value) {
+    if (value == null) return '-';
+    const pct = parseFloat(value) * 100;
+    const formatted = pct % 1 === 0 ? pct.toFixed(0) : pct.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+    return `${formatted}%`;
+}
+
+function ExternalLinkIcon() {
+    return (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+            <polyline points="15 3 21 3 21 9" />
+            <line x1="10" y1="14" x2="21" y2="3" />
+        </svg>
+    );
 }
 import { useApp } from '../context/AppContext';
 
@@ -68,6 +82,9 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
     const [page, setPage] = useState(1);
     const [showFilterMenu, setShowFilterMenu] = useState(false);
     const [filterEstadoIdx, setFilterEstadoIdx] = useState(null);
+    const [filterVariacion, setFilterVariacion] = useState(null); // null, 'Baja', 'Alta'
+    const [filterRevision, setFilterRevision] = useState(null); // null, 'Validado', 'Rechazado', 'Sin revisar'
+    const [revisiones, setRevisiones] = useState({}); // { [ID]: 'Validado' | 'Rechazado' }
     const [loading, setLoading] = useState(false);
     const [downloading, setDownloading] = useState(null); // 'balanceados', 'no_balanceados', 'sin_datos', null
     const rowsPerPage = 15;
@@ -93,7 +110,6 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
             if (activeTab === 'Balanceado') {
                 matchTab = r.moneda_nueva && r.moneda_nueva.toLowerCase() === 'balanceado';
             } else if (activeTab === 'No Balanceado') {
-                // Cualquier moneda específica (CLP, USD, EUR, etc.) que NO sea balanceado
                 matchTab = r.moneda_nueva && 
                           r.moneda_nueva.toLowerCase() !== 'balanceado' &&
                           r.moneda_nueva.trim() !== '' &&
@@ -103,8 +119,7 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
             }
             // activeTab === 'Todos' → matchTab = true (todos pasan)
 
-            // Filtro adicional de estado_idx (si se usa dropdown de filtro)
-            // Filtro por Estado (usa la columna Estado)
+            // Filtro por Estado
             const matchEstadoIdx = !filterEstadoIdx || (() => {
                 if (filterEstadoIdx === 1) return r.Estado === 'Estado_1';
                 if (filterEstadoIdx === 2) return r.Estado === 'Estado_2';
@@ -112,14 +127,21 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                 return true;
             })();
 
+            // Filtro por nivel de variación (calculado en el backend, campo nivel_variacion)
+            const matchVariacion = !filterVariacion || r.nivel_variacion === filterVariacion;
+
+            // Filtro por revisión (estado local: Validado, Rechazado, Sin revisar)
+            const revisionRow = revisiones[r.ID] || 'Sin revisar';
+            const matchRevision = !filterRevision || revisionRow === filterRevision;
+
             // Filtro de búsqueda
             const matchSearch = !search ||
                 (r.Nombre && r.Nombre.toLowerCase().includes(search.toLowerCase())) ||
                 (r.ID && r.ID.toString().toLowerCase().includes(search.toLowerCase())) ||
                 (r.moneda_antigua && r.moneda_antigua.toLowerCase().includes(search.toLowerCase()));
             
-            return matchTab && matchEstadoIdx && matchSearch;
-        }), [activeTab, filterEstadoIdx, search, SAMPLE_DATA]);
+            return matchTab && matchEstadoIdx && matchVariacion && matchRevision && matchSearch;
+        }), [activeTab, filterEstadoIdx, filterVariacion, filterRevision, revisiones, search, SAMPLE_DATA]); // eslint-disable-line
 
     const totalPages = Math.ceil(filtered.length / rowsPerPage);
     const paged = filtered.slice((page - 1) * rowsPerPage, page * rowsPerPage);
@@ -133,6 +155,26 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
     };
     const toggleRow = (id) =>
         setSelected(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
+
+    const handleValidar = () => {
+        if (selected.length === 0) return;
+        setRevisiones(prev => {
+            const next = { ...prev };
+            selected.forEach(id => { next[id] = 'Validado'; });
+            return next;
+        });
+        setSelected([]);
+    };
+
+    const handleRechazar = () => {
+        if (selected.length === 0) return;
+        setRevisiones(prev => {
+            const next = { ...prev };
+            selected.forEach(id => { next[id] = 'Rechazado'; });
+            return next;
+        });
+        setSelected([]);
+    };
 
     // Manejar descarga de exports
     const handleDownload = async (exportType) => {
@@ -166,8 +208,9 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
         instrumento: 0,   /* flex-1 */
         id_inst: 120,
         estado: 125,
-        moneda_antigua: 130,
         pct_antiguo: 110,
+        pct_nuevo: 110,
+        variacion: 100,
         acciones: 48,
     };
     const PX = 32; /* padding horizontal del card/filas (pixels) */
@@ -311,31 +354,82 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
 
                 {/* ── Toolbar ── */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: `8px ${PX}px`, ...borderBottom }}>
-                    {/* Filtrar */}
+                    {/* Filtrar — dropdown unificado con secciones Estado y Variación */}
                     <div style={{ position: 'relative' }}>
                         <button
-                            onClick={() => setShowFilterMenu(!showFilterMenu)}
-                            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: `1px solid ${filterEstadoIdx ? '#299D91' : '#E8E8E8'}`, color: filterEstadoIdx ? '#299D91' : '#525256', backgroundColor: filterEstadoIdx ? '#EBF7F6' : '#FAFAFA', transition: 'all 0.15s' }}
+                            onClick={() => setShowFilterMenu(v => !v)}
+                            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: `1px solid ${(filterEstadoIdx || filterVariacion || filterRevision) ? '#299D91' : '#E8E8E8'}`, color: (filterEstadoIdx || filterVariacion || filterRevision) ? '#299D91' : '#525256', backgroundColor: (filterEstadoIdx || filterVariacion || filterRevision) ? '#EBF7F6' : '#FAFAFA', transition: 'all 0.15s' }}
                         >
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                 <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
                             </svg>
-                            {filterEstadoIdx ? `Estado ${filterEstadoIdx}` : 'Filtrar'}
+                            {(() => {
+                                const parts = [];
+                                if (filterEstadoIdx) parts.push(`Estado ${filterEstadoIdx}`);
+                                if (filterVariacion) parts.push(`${filterVariacion} var.`);
+                                if (filterRevision) parts.push(filterRevision);
+                                return parts.length > 0 ? parts.join(' · ') : 'Filtrar';
+                            })()}
                         </button>
 
                         {showFilterMenu && (
-                            <div style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, zIndex: 50, width: 160, backgroundColor: '#FFFFFF', borderRadius: 12, border: '1px solid #DDE3E6', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05)', padding: '6px' }}>
+                            <div style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, zIndex: 50, width: 190, backgroundColor: '#FFFFFF', borderRadius: 12, border: '1px solid #DDE3E6', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05)', padding: '6px' }}>
+                                {/* Sección Estado */}
+                                <p style={{ margin: '6px 12px 4px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#9F9F9F' }}>Estado</p>
                                 {[null, 1, 2, 3].map((val) => (
                                     <button
-                                        key={val === null ? 'all' : val}
-                                        onClick={() => { setFilterEstadoIdx(val); setShowFilterMenu(false); setPage(1); }}
-                                        style={{ display: 'block', width: '100%', padding: '10px 12px', textAlign: 'left', fontSize: 13, fontWeight: filterEstadoIdx === val ? 700 : 500, color: filterEstadoIdx === val ? '#299D91' : '#525256', backgroundColor: filterEstadoIdx === val ? '#F0FFFE' : 'transparent', border: 'none', borderRadius: 6, cursor: 'pointer', transition: 'background-color 0.1s' }}
+                                        key={val === null ? 'est-all' : `est-${val}`}
+                                        onClick={() => { setFilterEstadoIdx(val); setPage(1); }}
+                                        style={{ display: 'block', width: '100%', padding: '8px 12px', textAlign: 'left', fontSize: 13, fontWeight: filterEstadoIdx === val ? 700 : 500, color: filterEstadoIdx === val ? '#299D91' : '#525256', backgroundColor: filterEstadoIdx === val ? '#F0FFFE' : 'transparent', border: 'none', borderRadius: 6, cursor: 'pointer', transition: 'background-color 0.1s' }}
                                         onMouseEnter={e => { if (filterEstadoIdx !== val) e.currentTarget.style.backgroundColor = '#F9FAFB'; }}
                                         onMouseLeave={e => { if (filterEstadoIdx !== val) e.currentTarget.style.backgroundColor = 'transparent'; }}
                                     >
-                                        {val === null ? 'Ver todos' : `Estado ${val}`}
+                                        {val === null ? 'Todos los estados' : `Estado ${val}`}
                                     </button>
                                 ))}
+                                {/* Divisor */}
+                                <div style={{ height: 1, backgroundColor: '#F0F0F0', margin: '6px 0' }} />
+                                {/* Sección Variación */}
+                                <p style={{ margin: '6px 12px 4px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#9F9F9F' }}>Variación</p>
+                                {[null, 'Baja', 'Alta'].map((val) => (
+                                    <button
+                                        key={val === null ? 'var-all' : `var-${val}`}
+                                        onClick={() => { setFilterVariacion(val); setPage(1); }}
+                                        style={{ display: 'block', width: '100%', padding: '8px 12px', textAlign: 'left', fontSize: 13, fontWeight: filterVariacion === val ? 700 : 500, color: filterVariacion === val ? '#299D91' : '#525256', backgroundColor: filterVariacion === val ? '#F0FFFE' : 'transparent', border: 'none', borderRadius: 6, cursor: 'pointer', transition: 'background-color 0.1s' }}
+                                        onMouseEnter={e => { if (filterVariacion !== val) e.currentTarget.style.backgroundColor = '#F9FAFB'; }}
+                                        onMouseLeave={e => { if (filterVariacion !== val) e.currentTarget.style.backgroundColor = 'transparent'; }}
+                                    >
+                                        {val === null ? 'Toda la variación' : `${val} variación`}
+                                    </button>
+                                ))}
+                                {/* Sección Revisión */}
+                                <div style={{ height: 1, backgroundColor: '#F0F0F0', margin: '6px 0' }} />
+                                <p style={{ margin: '6px 12px 4px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#9F9F9F' }}>Revisión</p>
+                                {[null, 'Validado', 'Rechazado', 'Sin revisar'].map((val) => (
+                                    <button
+                                        key={val === null ? 'rev-all' : `rev-${val}`}
+                                        onClick={() => { setFilterRevision(val); setPage(1); }}
+                                        style={{ display: 'block', width: '100%', padding: '8px 12px', textAlign: 'left', fontSize: 13, fontWeight: filterRevision === val ? 700 : 500, color: filterRevision === val ? '#299D91' : '#525256', backgroundColor: filterRevision === val ? '#F0FFFE' : 'transparent', border: 'none', borderRadius: 6, cursor: 'pointer', transition: 'background-color 0.1s' }}
+                                        onMouseEnter={e => { if (filterRevision !== val) e.currentTarget.style.backgroundColor = '#F9FAFB'; }}
+                                        onMouseLeave={e => { if (filterRevision !== val) e.currentTarget.style.backgroundColor = 'transparent'; }}
+                                    >
+                                        {val === null ? 'Todas las revisiones' : val}
+                                    </button>
+                                ))}
+                                {/* Botón limpiar todo */}
+                                {(filterEstadoIdx || filterVariacion || filterRevision) && (
+                                    <>
+                                        <div style={{ height: 1, backgroundColor: '#F0F0F0', margin: '6px 0' }} />
+                                        <button
+                                            onClick={() => { setFilterEstadoIdx(null); setFilterVariacion(null); setFilterRevision(null); setShowFilterMenu(false); setPage(1); }}
+                                            style={{ display: 'block', width: '100%', padding: '8px 12px', textAlign: 'left', fontSize: 13, fontWeight: 500, color: '#D94A38', backgroundColor: 'transparent', border: 'none', borderRadius: 6, cursor: 'pointer', transition: 'background-color 0.1s' }}
+                                            onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#FFF5F5'; }}
+                                            onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+                                        >
+                                            Limpiar filtros
+                                        </button>
+                                    </>
+                                )}
                             </div>
                         )}
                     </div>
@@ -353,16 +447,30 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                         />
                     </div>
 
-                    {/* Acción — no encoge */}
+                    {/* Acciones — no encogen */}
                     <button
-                        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 20px', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer', border: 'none', backgroundColor: '#299D91', color: '#FFFFFF', flexShrink: 0, transition: 'background-color 0.15s' }}
-                        onMouseEnter={e => e.currentTarget.style.backgroundColor = '#22857a'}
+                        onClick={handleValidar}
+                        disabled={selCount === 0}
+                        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 20px', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: selCount === 0 ? 'default' : 'pointer', border: 'none', backgroundColor: '#299D91', color: '#FFFFFF', flexShrink: 0, transition: 'all 0.15s', opacity: selCount === 0 ? 0.45 : 1 }}
+                        onMouseEnter={e => { if (selCount > 0) e.currentTarget.style.backgroundColor = '#22857a'; }}
                         onMouseLeave={e => e.currentTarget.style.backgroundColor = '#299D91'}
                     >
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                             <polyline points="20 6 9 17 4 12" />
                         </svg>
-                        {selCount > 0 ? `Validar (${selCount})` : 'Validar Selección'}
+                        {selCount > 0 ? `Validar (${selCount})` : 'Validar'}
+                    </button>
+                    <button
+                        onClick={handleRechazar}
+                        disabled={selCount === 0}
+                        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 20px', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: selCount === 0 ? 'default' : 'pointer', border: 'none', backgroundColor: '#D94A38', color: '#FFFFFF', flexShrink: 0, transition: 'all 0.15s', opacity: selCount === 0 ? 0.45 : 1 }}
+                        onMouseEnter={e => { if (selCount > 0) e.currentTarget.style.backgroundColor = '#b83c2d'; }}
+                        onMouseLeave={e => e.currentTarget.style.backgroundColor = '#D94A38'}
+                    >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                        </svg>
+                        {selCount > 0 ? `Rechazar (${selCount})` : 'Rechazar'}
                     </button>
                 </div>
 
@@ -375,8 +483,9 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                     <div style={{ flex: 1, minWidth: 0 }}>Instrumento</div>
                     <div style={{ width: COL.id_inst, flexShrink: 0 }}>ID</div>
                     <div style={{ width: COL.estado, flexShrink: 0 }}>Estado</div>
-                    <div style={{ width: COL.moneda_antigua, flexShrink: 0 }}>Moneda Antigua</div>
                     <div style={{ width: COL.pct_antiguo, flexShrink: 0, textAlign: 'right' }}>PCT Antiguo</div>
+                    <div style={{ width: COL.pct_nuevo, flexShrink: 0, textAlign: 'right' }}>PCT Nuevo</div>
+                    <div style={{ width: COL.variacion, flexShrink: 0, textAlign: 'right' }}>Variación</div>
                     <div style={{ width: COL.acciones, flexShrink: 0 }} />
                 </div>
 
@@ -412,10 +521,24 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                             </div>
 
                             {/* Instrumento */}
-                            <div style={{ flex: 1, minWidth: 0, paddingRight: 16 }}>
-                                <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#191919', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            <div style={{ flex: 1, minWidth: 0, paddingRight: 16, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#191919', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: '1 1 0', minWidth: 0 }}>
                                     {row.Nombre}
                                 </p>
+                                <button
+                                    onClick={e => { e.stopPropagation(); window.open(`https://web.finantech.cl/admin/instruments/${row.ID}`, '_blank'); }}
+                                    title="Ver en Finantech"
+                                    style={{
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        width: 24, height: 24, borderRadius: 6, border: 'none',
+                                        backgroundColor: 'transparent', color: '#9F9F9F', cursor: 'pointer',
+                                        flexShrink: 0, padding: 0,
+                                    }}
+                                    onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#EBF7F6'; e.currentTarget.style.color = '#299D91'; }}
+                                    onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#9F9F9F'; }}
+                                >
+                                    <ExternalLinkIcon />
+                                </button>
                             </div>
 
                             {/* ID */}
@@ -437,15 +560,33 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                                 );
                             })()}
 
-                            {/* Moneda Antigua */}
-                            <div style={{ width: COL.moneda_antigua, flexShrink: 0, fontSize: 14, fontWeight: 500, color: '#525256' }}>{row.moneda_antigua || '-'}</div>
-
                             {/* PCT Antiguo */}
                             <div style={{ width: COL.pct_antiguo, flexShrink: 0, textAlign: 'right' }}>
-                                <span style={{ fontSize: 15, fontWeight: 700, color: '#191919' }}>
-                                    {row.pct_dominancia_antigua != null ? formatDominanciaAntigua(row.pct_dominancia_antigua) : '-'}
+                                <span style={{ fontSize: 14, fontWeight: 600, color: '#191919' }}>
+                                    {row.pct_dominancia_antigua != null ? formatPctDominancia(row.pct_dominancia_antigua) : '-'}
                                 </span>
                             </div>
+
+                            {/* PCT Nuevo */}
+                            <div style={{ width: COL.pct_nuevo, flexShrink: 0, textAlign: 'right' }}>
+                                <span style={{ fontSize: 14, fontWeight: 600, color: '#191919' }}>
+                                    {row.pct_dominancia_nuevo != null ? formatPctDominancia(row.pct_dominancia_nuevo) : '-'}
+                                </span>
+                            </div>
+
+                            {/* Variación */}
+                            {(() => {
+                                const variacion = row.variacion_balanceados != null
+                                    ? row.variacion_balanceados
+                                    : row.variacion_no_balanceados;
+                                return (
+                                    <div style={{ width: COL.variacion, flexShrink: 0, textAlign: 'right' }}>
+                                        <span style={{ fontSize: 14, fontWeight: 600, color: '#191919' }}>
+                                            {formatVariacion(variacion)}
+                                        </span>
+                                    </div>
+                                );
+                            })()}
 
                             {/* Tres puntos */}
                             <div style={{ width: COL.acciones, flexShrink: 0, display: 'flex', justifyContent: 'flex-end' }}>
