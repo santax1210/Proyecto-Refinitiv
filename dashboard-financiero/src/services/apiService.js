@@ -199,6 +199,47 @@ export async function downloadExport(exportType) {
 }
 
 /**
+ * Descargar un archivo CSV de export filtrado por IDs
+ * 
+ * @param {String} exportType - Tipo de export: 'balanceados', 'no_balanceados', 'con_cambios', 'sin_datos'
+ * @param {Array} instrumentIds - Array de IDs de instrumentos a incluir en el export
+ */
+export async function downloadFilteredExport(exportType, instrumentIds) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/download-filtered/${exportType}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                instrument_ids: instrumentIds
+            })
+        });
+        
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.message || 'Error al descargar archivo filtrado');
+        }
+        
+        // Descargar el archivo
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `export_${exportType}_filtrado.csv`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        return { status: 'success', message: 'Archivo filtrado descargado' };
+    } catch (error) {
+        console.error(`Error al descargar export filtrado ${exportType}:`, error);
+        throw error;
+    }
+}
+
+/**
  * Reiniciar el estado del procesamiento
  */
 export async function resetProcessing() {
@@ -262,6 +303,7 @@ export default {
     getValidationResults,
     getExportData,
     downloadExport,
+    downloadFilteredExport,
     resetProcessing,
     uploadAndProcess,
 };

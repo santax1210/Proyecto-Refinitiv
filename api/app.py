@@ -418,6 +418,83 @@ def reset_data():
             'message': f'Error al reiniciar: {str(e)}'
         }), 500
 
+@app.route('/api/download-filtered/<export_type>', methods=['POST'])
+def download_filtered_export(export_type):
+    """
+    Descargar un archivo CSV de export filtrado por IDs de instrumentos.
+    
+    Body (JSON):
+    {
+        "instrument_ids": [23, 31, 32, ...]
+    }
+    
+    export_type: balanceados, no_balanceados, con_cambios, sin_datos
+    """
+    try:
+        # Obtener IDs del body
+        data = request.get_json()
+        if not data or 'instrument_ids' not in data:
+            return jsonify({
+                'status': 'error',
+                'message': 'Se requiere "instrument_ids" en el body'
+            }), 400
+        
+        instrument_ids = data['instrument_ids']
+        
+        # Si no hay IDs, descargar el archivo completo
+        if not instrument_ids:
+            return download_export(export_type)
+        
+        # Convertir IDs a set para búsqueda rápida
+        id_set = set(map(str, instrument_ids))
+        
+        # Ruta del archivo export original
+        export_path = os.path.join(app.config['EXPORTS_FOLDER'], f'export_{export_type}.csv')
+        
+        if not os.path.exists(export_path):
+            return jsonify({
+                'status': 'error',
+                'message': f'No existe el export: {export_type}'
+            }), 404
+        
+        # Leer y filtrar el CSV
+        import csv
+        from io import StringIO
+        
+        filtered_rows = []
+        with open(export_path, 'r', encoding='utf-8') as f:
+            reader = csv.reader(f, delimiter=';')
+            header = next(reader)  # Guardar encabezado
+            filtered_rows.append(header)
+            
+            # Filtrar filas por ID
+            for row in reader:
+                if row and row[0] in id_set:  # Primera columna es ID
+                    filtered_rows.append(row)
+        
+        # Crear CSV filtrado en memoria
+        output = StringIO()
+        writer = csv.writer(output, delimiter=';', lineterminator='\n')
+        writer.writerows(filtered_rows)
+        csv_content = output.getvalue()
+        output.close()
+        
+        # Crear respuesta con el CSV filtrado
+        from flask import Response
+        return Response(
+            csv_content,
+            mimetype='text/csv',
+            headers={
+                'Content-Disposition': f'attachment; filename=export_{export_type}_filtrado.csv'
+            }
+        )
+        
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': f'Error al descargar archivo filtrado: {str(e)}'
+        }), 500
+
 # ==================== ERROR HANDLERS ====================
 
 @app.errorhandler(413)

@@ -126,9 +126,7 @@ def generar_export_balanceados(df_final, df_allocations_nuevas, df_instruments, 
     # 4. Obtener información adicional de allocations_nuevas (instrument, tipo_id)
     # Tomar la primera fila de cada ID para obtener estos valores
     cols_info = ['instrument', 'tipo_id']
-    if 'date' in df_alloc_balanceados.columns:
-        cols_info.append('date')
-    
+    # Eliminamos 'date' de los exports, solo usamos 'Fecha' calculada abajo
     df_info = df_alloc_balanceados.groupby('ID').agg({
         col: 'first' for col in cols_info if col in df_alloc_balanceados.columns
     }).reset_index()
@@ -193,7 +191,7 @@ def generar_export_balanceados(df_final, df_allocations_nuevas, df_instruments, 
     }, inplace=True)
     
     # 11. Limpiar columnas temporales
-    cols_to_drop = [c for c in df_export.columns if c in ['SubMoneda', 'moneda_nueva', 'Moneda:']]
+    cols_to_drop = [c for c in df_export.columns if c in ['SubMoneda', 'moneda_nueva', 'Moneda:', 'date']]
     df_export = df_export.drop(columns=cols_to_drop, errors='ignore')
     
     # 8. Reordenar columnas: primero las fijas, luego las monedas dinámicas
@@ -261,10 +259,11 @@ def generar_export_no_balanceados(df_final):
 
 def generar_export_sin_datos(df_instruments, df_allocations_nuevas):
     """
-    Genera el export de instrumentos sin datos (no encontrados en allocations nuevas).
+    Genera el export de instrumentos sin datos.
     
-    Este export contiene los instrumentos que están en df_instruments (filtrados)
-    pero NO se encuentran en allocations nuevas.
+    Este export contiene los instrumentos que:
+    1. NO se encuentran en allocations nuevas, O
+    2. Se encuentran PERO todas sus filas tienen percentage = NA/inválido
     
     Formato del export:
     - ID (df_instruments)
@@ -286,14 +285,34 @@ def generar_export_sin_datos(df_instruments, df_allocations_nuevas):
     # 3. Calcular diferencia: instrumentos SIN allocations nuevas
     ids_sin_datos = ids_instruments - ids_allocations
     
+    # 4. NUEVO: Identificar instrumentos que ESTÁN en allocations pero tienen TODAS las filas con percentage inválido
+    ids_con_datos_invalidos = set()
+    for id_instrumento in ids_allocations:
+        grupo = df_allocations_nuevas[df_allocations_nuevas['ID'] == id_instrumento]
+        # Verificar si TODAS las filas tienen percentage inválido
+        percentages_validos = grupo['percentage'].dropna()
+        percentages_validos = percentages_validos[percentages_validos > 0]
+        
+        if len(percentages_validos) == 0:
+            ids_con_datos_invalidos.add(id_instrumento)
+    
+    # 5. Combinar ambos sets: instrumentos sin datos = no encontrados + con datos inválidos
+    ids_sin_datos = ids_sin_datos | ids_con_datos_invalidos
+    
+    # LOG: Informar sobre ambos tipos de instrumentos sin datos
+    print(f"  [INFO] Instrumentos sin datos:")
+    print(f"    - No encontrados en allocations nuevas: {len(ids_sin_datos - ids_con_datos_invalidos)}")
+    print(f"    - Con TODAS las filas percentage=NA: {len(ids_con_datos_invalidos)}")
+    print(f"    - TOTAL sin datos: {len(ids_sin_datos)}")
+    
     if len(ids_sin_datos) == 0:
         print("ADVERTENCIA: No hay instrumentos sin datos.")
         return pd.DataFrame(columns=['ID', 'Instrumento'])
     
-    # 4. Filtrar df_instruments para obtener solo los sin datos
+    # 6. Filtrar df_instruments para obtener solo los sin datos
     df_sin_datos = df_instruments[df_instruments['ID'].isin(ids_sin_datos)].copy()
     
-    # 5. Seleccionar y renombrar columnas
+    # 7. Seleccionar y renombrar columnas
     df_export = df_sin_datos[['ID', 'Nombre']].copy()
     df_export.rename(columns={'Nombre': 'Instrumento'}, inplace=True)
     

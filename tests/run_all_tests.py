@@ -67,6 +67,7 @@ def main():
         ('test_exports.py', 'Test 6: Generación y Validación de Exports'),
         ('test_pipeline_completo.py', 'Test 7: Pipeline Completo (End-to-End)'),
         ('test_backend_frontend_integration.py', 'Test 8: Integración Backend-Frontend'),
+        ('test_variacion_monedas.py', 'Test 9: Cálculo de Variación de Monedas (Bal/No Bal)'),
     ]
     
     resultados = []

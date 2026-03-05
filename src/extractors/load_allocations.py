@@ -304,6 +304,10 @@ def _cruzar_con_instruments(df_instruments, df_nuevas):
     El cruce es secuencial (primero RIC, luego Isin, luego Cusip) para evitar
     duplicados cuando un instrumento matchea por múltiples claves.
     
+    FILTRADO AUTOMÁTICO: Excluye instrumentos que tengan TODAS sus filas con
+    percentage inválido (NaN, 0 o nulo). Solo retorna instrumentos con al menos
+    una fila con percentage válido.
+    
     Parámetros:
         df_instruments: DataFrame con instrumentos base
         df_nuevas: DataFrame con allocations nuevas cargadas
@@ -343,6 +347,28 @@ def _cruzar_con_instruments(df_instruments, df_nuevas):
     cols_to_keep = [c for c in ['ID', 'Nombre', 'instrument', 'class', 'percentage', 'date', 'tipo_id'] 
                     if c in df_merged.columns]
     df_merged = df_merged[cols_to_keep].drop_duplicates(subset=['ID', 'class'])
+    
+    # FILTRADO: Excluir instrumentos con TODAS las filas percentage inválido
+    # Identificar IDs que tienen AL MENOS UNA fila con percentage válido
+    ids_con_datos_validos = set()
+    ids_sin_datos_validos = set()
+    
+    for id_instrumento, grupo in df_merged.groupby('ID'):
+        # Verificar si tiene AL MENOS UNA fila con percentage válido
+        percentages_validos = grupo['percentage'].dropna()
+        percentages_validos = percentages_validos[percentages_validos > 0]
+        
+        if len(percentages_validos) > 0:
+            ids_con_datos_validos.add(id_instrumento)
+        else:
+            ids_sin_datos_validos.add(id_instrumento)
+    
+    # Log informativo
+    if ids_sin_datos_validos:
+        print(f"  [INFO] Excluidos {len(ids_sin_datos_validos)} instrumentos con TODAS las filas percentage=NA")
+    
+    # Filtrar: mantener solo IDs con datos válidos
+    df_merged = df_merged[df_merged['ID'].isin(ids_con_datos_validos)].copy()
     
     return df_merged
 

@@ -1,4 +1,20 @@
 import { useState, useMemo, useEffect } from 'react';
+import { downloadExport, downloadFilteredExport } from '../services/apiService';
+
+// Formatea el string de pct_dominancia_antigua para mostrarlo limpio
+function formatDominanciaAntigua(value) {
+    if (!value) return '-';
+    // Ejemplo de entrada: "CLP 100.00%%" o "CLP 62.40%%"
+    // Elimina el segundo '%', los ceros innecesarios y espacios extra
+    // Busca moneda y porcentaje
+    const match = String(value).match(/([A-Z]{3,})\s*([\d\.]+)%*/);
+    if (!match) return value;
+    const moneda = match[1];
+    let pct = parseFloat(match[2]);
+    // Elimina decimales innecesarios
+    pct = pct % 1 === 0 ? pct.toFixed(0) : pct.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+    return `${moneda} ${pct}%`;
+}
 import { useApp } from '../context/AppContext';
 
 const TABS = ['Todos', 'Balanceado', 'No Balanceado', 'Sin datos'];
@@ -53,6 +69,7 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
     const [showFilterMenu, setShowFilterMenu] = useState(false);
     const [filterEstadoIdx, setFilterEstadoIdx] = useState(null);
     const [loading, setLoading] = useState(false);
+    const [downloading, setDownloading] = useState(null); // 'balanceados', 'no_balanceados', 'sin_datos', null
     const rowsPerPage = 15;
 
     // Cargar datos al montar el componente si no están disponibles
@@ -87,10 +104,11 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
             // activeTab === 'Todos' → matchTab = true (todos pasan)
 
             // Filtro adicional de estado_idx (si se usa dropdown de filtro)
+            // Filtro por Estado (usa la columna Estado)
             const matchEstadoIdx = !filterEstadoIdx || (() => {
-                if (filterEstadoIdx === 1) return r.moneda_nueva && r.moneda_nueva.toLowerCase() === 'balanceado';
-                if (filterEstadoIdx === 2) return r.moneda_nueva && r.moneda_nueva.toLowerCase() !== 'balanceado' && r.Cambio !== 'Sin datos';
-                if (filterEstadoIdx === 3) return r.Cambio === 'Sin datos';
+                if (filterEstadoIdx === 1) return r.Estado === 'Estado_1';
+                if (filterEstadoIdx === 2) return r.Estado === 'Estado_2';
+                if (filterEstadoIdx === 3) return r.Estado === 'Estado_3';
                 return true;
             })();
 
@@ -115,6 +133,31 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
     };
     const toggleRow = (id) =>
         setSelected(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
+
+    // Manejar descarga de exports
+    const handleDownload = async (exportType) => {
+        try {
+            setDownloading(exportType);
+            
+            // Obtener IDs de los instrumentos filtrados actualmente
+            const filteredIds = filtered.map(row => row.ID);
+            
+            // Si hay filtros aplicados, usar descarga filtrada
+            // De lo contrario, descargar el archivo completo
+            if (filteredIds.length < SAMPLE_DATA.length) {
+                await downloadFilteredExport(exportType, filteredIds);
+                console.log(`Export ${exportType} filtrado descargado exitosamente (${filteredIds.length} instrumentos)`);
+            } else {
+                await downloadExport(exportType);
+                console.log(`Export ${exportType} completo descargado exitosamente`);
+            }
+        } catch (error) {
+            console.error('Error al descargar export:', error);
+            alert(`Error al descargar el archivo: ${error.message}`);
+        } finally {
+            setDownloading(null);
+        }
+    };
 
     /* ── Columnas: anchos fijos compactos para que quepan en pantalla ── */
     const COL = {
@@ -378,8 +421,21 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                             {/* ID */}
                             <div style={{ width: COL.id_inst, flexShrink: 0, fontSize: 14, color: '#525256' }}>{row.ID}</div>
 
-                            {/* Estado - Muestra Estado_1, Estado_2, Estado_3 */}
-                            <div style={{ width: COL.estado, flexShrink: 0, fontSize: 14, fontWeight: 500, color: '#525256' }}>{row.Estado || ''}</div>
+                            {/* Estado - Formateado y coloreado */}
+                            {(() => {
+                                // Mapea Estado_1, Estado_2, Estado_3 a texto y color
+                                const estadoMap = {
+                                    'Estado_1': { label: 'Estado 1', color: '#299D91' }, // verde
+                                    'Estado_2': { label: 'Estado 2', color: '#F0A050' }, // amarillo
+                                    'Estado_3': { label: 'Estado 3', color: '#D94A38' }  // rojo
+                                };
+                                const estado = estadoMap[row.Estado];
+                                return (
+                                    <div style={{ width: COL.estado, flexShrink: 0, fontSize: 14, fontWeight: 700, color: estado ? estado.color : '#525256' }}>
+                                        {estado ? estado.label : (row.Estado || '')}
+                                    </div>
+                                );
+                            })()}
 
                             {/* Moneda Antigua */}
                             <div style={{ width: COL.moneda_antigua, flexShrink: 0, fontSize: 14, fontWeight: 500, color: '#525256' }}>{row.moneda_antigua || '-'}</div>
@@ -387,7 +443,7 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                             {/* PCT Antiguo */}
                             <div style={{ width: COL.pct_antiguo, flexShrink: 0, textAlign: 'right' }}>
                                 <span style={{ fontSize: 15, fontWeight: 700, color: '#191919' }}>
-                                    {row.pct_dominancia_antigua != null ? `${row.pct_dominancia_antigua}%` : '-'}
+                                    {row.pct_dominancia_antigua != null ? formatDominanciaAntigua(row.pct_dominancia_antigua) : '-'}
                                 </span>
                             </div>
 
@@ -436,35 +492,52 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
 
                 {/* ── Botones de Generación ── */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12, padding: `16px ${PX}px`, backgroundColor: '#F9FAFB', ...borderTop }}>
+                    {/* Mostrar contador de filtros si hay filtros aplicados */}
+                    {filtered.length < SAMPLE_DATA.length && (
+                        <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#525256', fontWeight: 500 }}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#299D91" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+                            </svg>
+                            <span>
+                                Filtros aplicados: <strong style={{ color: '#299D91' }}>{filtered.length}</strong> de {SAMPLE_DATA.length} instrumentos
+                            </span>
+                        </div>
+                    )}
                     <button
-                        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', border: 'none', backgroundColor: '#299D91', color: '#FFFFFF', transition: 'all 0.15s' }}
-                        onMouseEnter={e => e.currentTarget.style.backgroundColor = '#22857a'}
-                        onMouseLeave={e => e.currentTarget.style.backgroundColor = '#299D91'}
+                        onClick={() => handleDownload('balanceados')}
+                        disabled={downloading === 'balanceados'}
+                        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: downloading === 'balanceados' ? 'default' : 'pointer', border: 'none', backgroundColor: downloading === 'balanceados' ? '#cccccc' : '#299D91', color: '#FFFFFF', transition: 'all 0.15s', opacity: downloading === 'balanceados' ? 0.6 : 1 }}
+                        onMouseEnter={e => { if (downloading !== 'balanceados') e.currentTarget.style.backgroundColor = '#22857a'; }}
+                        onMouseLeave={e => { if (downloading !== 'balanceados') e.currentTarget.style.backgroundColor = '#299D91'; }}
                     >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v4a2 2 0 0 1 2-2" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
                         </svg>
-                        Generar Balanceado
+                        {downloading === 'balanceados' ? 'Descargando...' : 'Generar Balanceado'}
                     </button>
                     <button
-                        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', border: 'none', backgroundColor: '#F0A050', color: '#FFFFFF', transition: 'all 0.15s' }}
-                        onMouseEnter={e => e.currentTarget.style.backgroundColor = '#d98a3d'}
-                        onMouseLeave={e => e.currentTarget.style.backgroundColor = '#F0A050'}
+                        onClick={() => handleDownload('no_balanceados')}
+                        disabled={downloading === 'no_balanceados'}
+                        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: downloading === 'no_balanceados' ? 'default' : 'pointer', border: 'none', backgroundColor: downloading === 'no_balanceados' ? '#cccccc' : '#F0A050', color: '#FFFFFF', transition: 'all 0.15s', opacity: downloading === 'no_balanceados' ? 0.6 : 1 }}
+                        onMouseEnter={e => { if (downloading !== 'no_balanceados') e.currentTarget.style.backgroundColor = '#d98a3d'; }}
+                        onMouseLeave={e => { if (downloading !== 'no_balanceados') e.currentTarget.style.backgroundColor = '#F0A050'; }}
                     >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v4a2 2 0 0 1 2-2" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
                         </svg>
-                        Generar no balanceados
+                        {downloading === 'no_balanceados' ? 'Descargando...' : 'Generar no balanceados'}
                     </button>
                     <button
-                        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', border: 'none', backgroundColor: '#9F9F9F', color: '#FFFFFF', transition: 'all 0.15s' }}
-                        onMouseEnter={e => e.currentTarget.style.backgroundColor = '#8a8a8a'}
-                        onMouseLeave={e => e.currentTarget.style.backgroundColor = '#9F9F9F'}
+                        onClick={() => handleDownload('sin_datos')}
+                        disabled={downloading === 'sin_datos'}
+                        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: downloading === 'sin_datos' ? 'default' : 'pointer', border: 'none', backgroundColor: downloading === 'sin_datos' ? '#cccccc' : '#9F9F9F', color: '#FFFFFF', transition: 'all 0.15s', opacity: downloading === 'sin_datos' ? 0.6 : 1 }}
+                        onMouseEnter={e => { if (downloading !== 'sin_datos') e.currentTarget.style.backgroundColor = '#8a8a8a'; }}
+                        onMouseLeave={e => { if (downloading !== 'sin_datos') e.currentTarget.style.backgroundColor = '#9F9F9F'; }}
                     >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v4a2 2 0 0 1 2-2" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
                         </svg>
-                        Generar sin datos
+                        {downloading === 'sin_datos' ? 'Descargando...' : 'Generar sin datos'}
                     </button>
                 </div>
 
