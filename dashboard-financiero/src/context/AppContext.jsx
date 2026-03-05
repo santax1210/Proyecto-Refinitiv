@@ -26,6 +26,9 @@ export function AppProvider({ children }) {
      */
     const uploadAndProcess = useCallback(async (files) => {
         try {
+            // Limpiar revisiones guardadas del procesamiento anterior
+            try { localStorage.removeItem('allocations_revisiones'); } catch { /* ignorar */ }
+
             // Actualizar estado a uploading
             setProcessingState({
                 status: 'uploading',

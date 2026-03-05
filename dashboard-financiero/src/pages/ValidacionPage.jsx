@@ -84,11 +84,23 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
     const [filterEstadoIdx, setFilterEstadoIdx] = useState(null);
     const [filterVariacion, setFilterVariacion] = useState(null); // null, 'Baja', 'Alta'
     const [filterRevision, setFilterRevision] = useState(null); // null, 'Validado', 'Rechazado', 'Sin revisar'
-    const [revisiones, setRevisiones] = useState({}); // { [ID]: 'Validado' | 'Rechazado' }
+    const [revisiones, setRevisiones] = useState(() => {
+        try {
+            const saved = localStorage.getItem('allocations_revisiones');
+            return saved ? JSON.parse(saved) : {};
+        } catch { return {}; }
+    }); // { [ID]: 'Validado' | 'Rechazado' }
     const [loading, setLoading] = useState(false);
     const [downloading, setDownloading] = useState(null); // 'balanceados', 'no_balanceados', 'sin_datos', null
     const [showGlosario, setShowGlosario] = useState(false);
     const rowsPerPage = 15;
+
+    // Persistir revisiones en localStorage cada vez que cambian
+    useEffect(() => {
+        try {
+            localStorage.setItem('allocations_revisiones', JSON.stringify(revisiones));
+        } catch { /* cuota excedida u otro error, ignorar */ }
+    }, [revisiones]);
 
     // Cargar datos al montar el componente si no están disponibles
     useEffect(() => {
