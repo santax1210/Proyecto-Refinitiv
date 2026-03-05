@@ -3,7 +3,7 @@ import sys
 import os
 
 # Añadimos el root al path para poder importar src
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 from src.extractors.moneda.load_instruments import load_df_instruments
 from src.extractors.moneda.load_allocations import load_allocations_nuevas, load_allocations_antiguas

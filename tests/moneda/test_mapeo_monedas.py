@@ -9,7 +9,7 @@ import pandas as pd
 import sys
 import os
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))  
 
 from src.extractors.moneda.load_allocations import CURRENCY_MAP_REFINITIV_TO_ISO
 

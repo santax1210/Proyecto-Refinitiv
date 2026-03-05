@@ -739,8 +739,8 @@ def filtrar_no_balanceados(df_final):
 if __name__ == "__main__":
     import sys
     sys.path.insert(0, '.')
-    from src.extractors.load_instruments import load_df_instruments
-    from src.extractors.load_allocations import load_allocations_nuevas, load_allocations_antiguas
+    from src.extractors.moneda.load_instruments import load_df_instruments
+    from src.extractors.moneda.load_allocations import load_allocations_nuevas, load_allocations_antiguas
     
     print("\n" + "="*70)
     print(" TEST: CREACIÓN DE DF_FINAL ".center(70, "="))

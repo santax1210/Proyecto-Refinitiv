@@ -328,9 +328,9 @@ if __name__ == "__main__":
     import sys
     import os
     sys.path.insert(0, '.')
-    from src.extractors.load_instruments import load_df_instruments
-    from src.extractors.load_allocations import load_allocations_nuevas, load_allocations_antiguas
-    from src.logic.crear_df_final import crear_df_final
+    from src.extractors.moneda.load_instruments import load_df_instruments
+    from src.extractors.moneda.load_allocations import load_allocations_nuevas, load_allocations_antiguas
+    from src.logic.moneda.crear_df_final import crear_df_final
     
     print("\n" + "="*70)
     print(" TEST: GENERACIÓN DE EXPORTS ".center(70, "="))

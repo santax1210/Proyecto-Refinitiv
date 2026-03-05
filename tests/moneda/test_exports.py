@@ -15,7 +15,7 @@ import pandas as pd
 from datetime import datetime
 
 # Asegurar que el directorio raíz está en el path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from src.extractors.moneda.load_instruments import load_df_instruments
 from src.extractors.moneda.load_allocations import load_allocations_nuevas, load_allocations_antiguas

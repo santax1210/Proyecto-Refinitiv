@@ -17,9 +17,9 @@ import pandas as pd
 # Agregar src al path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from src.extractors.load_instruments import load_df_instruments
-from src.extractors.load_allocations import load_allocations_nuevas, load_allocations_antiguas
-from src.logic.clasificacion import ejecutar_pipeline_completo
+from src.extractors.moneda.load_instruments import load_df_instruments
+from src.extractors.moneda.load_allocations import load_allocations_nuevas, load_allocations_antiguas
+from src.logic.moneda.clasificacion import ejecutar_pipeline_completo
 
 
 def test_estructura_resultados():

@@ -695,7 +695,7 @@ def load_allocations_antiguas(df_instruments, antiguas_path):
 if __name__ == "__main__":
     import sys
     sys.path.insert(0, '.')
-    from src.extractors.load_instruments import load_df_instruments
+    from src.extractors.moneda.load_instruments import load_df_instruments
     
     print("\n" + "="*70)
     print(" TEST: CARGA DE ALLOCATIONS (NUEVAS Y ANTIGUAS) ".center(70, "="))
