@@ -452,6 +452,108 @@ def download_export(export_type):
             'message': f'Error al descargar archivo: {str(e)}'
         }), 500
 
+@app.route('/api/instrument/<int:instrument_id>/detail', methods=['GET'])
+def get_instrument_detail(instrument_id):
+    """
+    Obtener el detalle de composición (breakdowns) de un instrumento.
+    Retorna las top-N clases (monedas o regiones) antiguas y nuevas.
+    """
+    try:
+        import pandas as pd
+
+        clasificacion = processing_state.get('clasificacion', 'moneda')
+        proc_folder, _, _ = get_result_paths(clasificacion)
+
+        TOP_N = 4  # Top 4 + "Otros"
+
+        if clasificacion == 'region':
+            nuevas_path = os.path.join(proc_folder, 'allocations_nuevas_region.csv')
+            antiguas_path = os.path.join(proc_folder, 'allocations_antiguas_region.csv')
+            clase_col_new = 'region'
+            exclude_cols = {'ID', 'Nombre', 'Pct_dominancia', 'Base Region:'}
+        else:
+            nuevas_path = os.path.join(proc_folder, 'allocations_nuevas.csv')
+            antiguas_path = os.path.join(proc_folder, 'allocations_antiguas.csv')
+            clase_col_new = 'class'
+            exclude_cols = {'ID', 'Nombre', 'SubMoneda', 'Pct_dominancia', 'Moneda:'}
+
+        breakdown_nueva = []
+        breakdown_antigua = []
+        fecha = None
+        count_nueva = 0
+
+        # ── Nuevas allocations (long format) ──
+        if os.path.exists(nuevas_path):
+            df_new = pd.read_csv(nuevas_path, sep=';', encoding='latin1')
+            rows = df_new[df_new['ID'] == instrument_id]
+            if len(rows) > 0:
+                if 'date' in rows.columns:
+                    fecha = str(rows['date'].iloc[0])
+                grouped = (
+                    rows.groupby(clase_col_new, as_index=False)['percentage']
+                    .sum()
+                    .sort_values('percentage', ascending=False)
+                    .reset_index(drop=True)
+                )
+                count_nueva = len(grouped)
+                if len(grouped) > TOP_N:
+                    top = grouped.iloc[:TOP_N]
+                    otros_pct = round(float(grouped.iloc[TOP_N:]['percentage'].sum()), 2)
+                    breakdown_nueva = [
+                        {'clase': str(r[clase_col_new]), 'pct': round(float(r['percentage']), 2)}
+                        for _, r in top.iterrows()
+                    ]
+                    if otros_pct > 0:
+                        breakdown_nueva.append({'clase': 'Otros', 'pct': otros_pct})
+                else:
+                    breakdown_nueva = [
+                        {'clase': str(r[clase_col_new]), 'pct': round(float(r['percentage']), 2)}
+                        for _, r in grouped.iterrows()
+                    ]
+
+        # ── Antiguas allocations (wide format) ──
+        if os.path.exists(antiguas_path):
+            df_ant = pd.read_csv(antiguas_path, sep=';', encoding='latin1')
+            inst_row = df_ant[df_ant['ID'] == instrument_id]
+            if len(inst_row) > 0:
+                row = inst_row.iloc[0]
+                values = []
+                for col in df_ant.columns:
+                    if col in exclude_cols:
+                        continue
+                    try:
+                        val = row[col]
+                        if pd.notna(val):
+                            fval = float(val)
+                            if fval > 0:
+                                values.append({'clase': col, 'pct': round(fval, 2)})
+                    except (ValueError, TypeError):
+                        continue
+                values.sort(key=lambda x: x['pct'], reverse=True)
+                if len(values) > TOP_N:
+                    otros_pct = round(sum(v['pct'] for v in values[TOP_N:]), 2)
+                    breakdown_antigua = values[:TOP_N]
+                    if otros_pct > 0:
+                        breakdown_antigua.append({'clase': 'Otros', 'pct': otros_pct})
+                else:
+                    breakdown_antigua = values
+
+        return jsonify({
+            'status': 'success',
+            'pipeline': clasificacion,
+            'breakdown_antigua': breakdown_antigua,
+            'breakdown_nueva': breakdown_nueva,
+            'count_nueva': count_nueva,
+            'fecha': fecha,
+        })
+
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': f'Error al obtener detalle del instrumento: {str(e)}'
+        }), 500
+
+
 @app.route('/api/reset', methods=['DELETE'])
 def reset_data():
     """Limpiar datos temporales y reiniciar estado."""

@@ -69,13 +69,12 @@ function FileSlot({ slotKey, label, desc, file, onFile, onClear }) {
     );
 }
 
+
 export default function InicioPage() {
-    const [clasificacion, setClasificacion] = useState('');
+    const { clasificacion, setClasificacion, uploadAndProcess, processingState } = useApp();
     const [slots, setSlots] = useState({});
     const [processing, setProcessing] = useState(false);
     const [error, setError] = useState(null);
-
-    const { uploadAndProcess, processingState } = useApp();
 
     const handleFile  = (key, file) => setSlots(prev => ({ ...prev, [key]: file }));
     const handleClear = (key) => setSlots(prev => { const n = { ...prev }; delete n[key]; return n; });
@@ -96,7 +95,7 @@ export default function InicioPage() {
         setProcessing(true);
         setError(null);
         try {
-            await uploadAndProcess({ ...slots, clasificacion });
+            await uploadAndProcess({ ...slots });
         } catch (err) {
             setError(err.message || 'Error al procesar archivos');
         } finally {

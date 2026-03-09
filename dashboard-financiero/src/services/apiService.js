@@ -167,6 +167,20 @@ export async function getExportData(exportType) {
 }
 
 /**
+ * Obtener el detalle de composición de un instrumento (breakdowns antigua y nueva)
+ * @param {Number} instrumentId - ID del instrumento
+ */
+export async function getInstrumentDetail(instrumentId) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/instrument/${instrumentId}/detail`);
+        return await handleResponse(response);
+    } catch (error) {
+        console.error(`Error al obtener detalle del instrumento ${instrumentId}:`, error);
+        throw error;
+    }
+}
+
+/**
  * Descargar un archivo CSV de export
  * 
  * @param {String} exportType - Tipo de export: 'balanceados', 'no_balanceados', 'con_cambios', 'sin_datos'

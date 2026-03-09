@@ -10,6 +10,7 @@ import * as api from '../services/apiService';
 
 const AppContext = createContext(null);
 
+
 export function AppProvider({ children }) {
     const [uploadedFiles, setUploadedFiles] = useState([]);
     const [processingState, setProcessingState] = useState({
@@ -20,14 +21,16 @@ export function AppProvider({ children }) {
     });
     const [validationData, setValidationData] = useState(null);
     const [summary, setSummary] = useState(null);
+    const [clasificacion, setClasificacion] = useState('');
 
     /**
      * Subir archivos y ejecutar pipeline completo
      */
     const uploadAndProcess = useCallback(async (files) => {
         try {
-            // Extraer clasificación del objeto de archivos
-            const { clasificacion = 'moneda', ...fileMap } = files;
+            // Usar la clasificacion global del contexto si existe, si no, fallback a la que venga en files o 'moneda'
+            const clasif = clasificacion || files.clasificacion || 'moneda';
+            const { clasificacion: _omit, ...fileMap } = files;
 
             // Limpiar revisiones guardadas del procesamiento anterior
             try { localStorage.removeItem('allocations_revisiones'); } catch { /* ignorar */ }
@@ -41,7 +44,7 @@ export function AppProvider({ children }) {
             });
 
             // Subir archivos
-            const uploadResult = await api.uploadFiles(fileMap, clasificacion);
+            const uploadResult = await api.uploadFiles(fileMap, clasif);
             
             if (uploadResult.status === 'error') {
                 throw new Error(uploadResult.message);
@@ -57,7 +60,7 @@ export function AppProvider({ children }) {
                 error: null,
             });
 
-            await api.startProcessing(clasificacion);
+            await api.startProcessing(clasif);
 
             // Hacer polling del estado
             await api.pollProcessingStatus((status) => {
@@ -95,7 +98,7 @@ export function AppProvider({ children }) {
             });
             throw error;
         }
-    }, []);
+    }, [clasificacion]);
 
     /**
      * Cargar resultados de validación (si ya fueron procesados)
@@ -151,13 +154,13 @@ export function AppProvider({ children }) {
         processingState,
         validationData,
         summary,
-        
+        clasificacion,
+        setClasificacion,
         // Acciones
         uploadAndProcess,
         loadValidationResults,
         resetProcessing,
         checkApiHealth,
-        
         // Setters directos (para casos especiales)
         setUploadedFiles,
         setProcessingState,
