@@ -115,17 +115,19 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
     // Usar los datos reales o array vacío si no hay datos
     const SAMPLE_DATA = validationData || [];
 
-    // Filtrado basado en moneda_nueva y Cambio
+    // Filtrado basado en moneda_nueva / region_nueva y Cambio
     const filtered = useMemo(() =>
         SAMPLE_DATA.filter(r => {
-            // Filtro por Tab (usa moneda_nueva y Cambio, NO la columna Estado)
+            // Soporta pipeline moneda (moneda_nueva) y región (region_nueva)
+            const clasificacionNueva = r.moneda_nueva ?? r.region_nueva;
+            // Filtro por Tab
             let matchTab = true;
             if (activeTab === 'Balanceado') {
-                matchTab = r.moneda_nueva && r.moneda_nueva.toLowerCase() === 'balanceado';
+                matchTab = clasificacionNueva && clasificacionNueva.toLowerCase() === 'balanceado';
             } else if (activeTab === 'No Balanceado') {
-                matchTab = r.moneda_nueva && 
-                          r.moneda_nueva.toLowerCase() !== 'balanceado' &&
-                          r.moneda_nueva.trim() !== '' &&
+                matchTab = clasificacionNueva &&
+                          clasificacionNueva.toLowerCase() !== 'balanceado' &&
+                          clasificacionNueva.trim() !== '' &&
                           r.Cambio !== 'Sin datos';
             } else if (activeTab === 'Sin datos') {
                 matchTab = r.Cambio === 'Sin datos';
@@ -728,7 +730,7 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                             {/* PCT Nuevo */}
                             <div style={{ width: COL.pct_nuevo, flexShrink: 0, textAlign: 'right' }}>
                                 <span style={{ fontSize: 14, fontWeight: 600, color: '#191919' }}>
-                                    {row.pct_dominancia_nuevo != null ? formatPctDominancia(row.pct_dominancia_nuevo) : '-'}
+                                    {(row.pct_dominancia_nuevo ?? row.pct_dominancia_nueva) != null ? formatPctDominancia(row.pct_dominancia_nuevo ?? row.pct_dominancia_nueva) : '-'}
                                 </span>
                             </div>
 

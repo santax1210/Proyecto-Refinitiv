@@ -36,21 +36,19 @@ export async function checkHealth() {
 /**
  * Subir archivos CSV al backend
  * 
- * @param {Object} files - Objeto con los archivos a subir:
- *   - posiciones: File
- *   - instruments: File
- *   - allocations_nuevas: File
- *   - allocations_antiguas: File
+ * @param {Object} files - Objeto con los archivos a subir
+ * @param {string} clasificacion - Tipo de clasificación ('Moneda', 'Región', 'Industria')
  */
-export async function uploadFiles(files) {
+export async function uploadFiles(files, clasificacion = 'moneda') {
     try {
         const formData = new FormData();
         
-        // Agregar cada archivo al FormData con el nombre esperado por el backend
+        // Agregar archivos al FormData con los nombres esperados por el backend
         if (files.posiciones) formData.append('posiciones', files.posiciones);
         if (files.instruments) formData.append('instruments', files.instruments);
         if (files.allocations_nuevas) formData.append('allocations_nuevas', files.allocations_nuevas);
         if (files.allocations_antiguas) formData.append('allocations_antiguas', files.allocations_antiguas);
+        formData.append('clasificacion', clasificacion);
         
         console.log('Subiendo archivos:', Object.keys(files));
         
@@ -71,15 +69,17 @@ export async function uploadFiles(files) {
 
 /**
  * Iniciar el procesamiento del pipeline
+ * @param {string} clasificacion - Tipo de clasificación
  */
-export async function startProcessing() {
+export async function startProcessing(clasificacion = 'moneda') {
     try {
-        console.log('Iniciando procesamiento del pipeline...');
+        console.log('Iniciando procesamiento del pipeline:', clasificacion);
         const response = await fetch(`${API_BASE_URL}/api/process`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
+            body: JSON.stringify({ clasificacion }),
         });
         
         return await handleResponse(response);

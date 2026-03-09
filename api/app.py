@@ -40,13 +40,41 @@ processing_state = {
     'error': None
 }
 
-# Archivos esperados
-REQUIRED_FILES = {
-    'posiciones': 'posiciones.csv',
-    'instruments': 'instruments.csv',
-    'allocations_nuevas': 'allocations_nuevas.csv',
-    'allocations_antiguas': 'allocations_currency.csv'
-}
+# Configuración de archivos según clasificación
+def get_file_config(clasificacion, upload_folder):
+    """Devuelve {file_key: ruta_destino} según la clasificación seleccionada."""
+    region_folder = os.path.join(upload_folder, 'region')
+    if clasificacion == 'region':
+        return {
+            'posiciones':          os.path.join(upload_folder, 'posiciones.csv'),
+            'instruments':         os.path.join(upload_folder, 'instruments.csv'),
+            'allocations_nuevas':  os.path.join(region_folder, 'allocations_nuevas_region.csv'),
+            'allocations_antiguas': os.path.join(region_folder, 'allocations_region.csv'),
+        }
+    else:  # moneda (default)
+        return {
+            'posiciones':          os.path.join(upload_folder, 'posiciones.csv'),
+            'instruments':         os.path.join(upload_folder, 'instruments.csv'),
+            'allocations_nuevas':  os.path.join(upload_folder, 'allocations_nuevas.csv'),
+            'allocations_antiguas': os.path.join(upload_folder, 'allocations_currency.csv'),
+        }
+
+def get_result_paths(clasificacion=None):
+    """Devuelve (proc_folder, exp_folder, df_final_name) según la clasificación procesada."""
+    if clasificacion is None:
+        clasificacion = processing_state.get('clasificacion', 'moneda')
+    if clasificacion == 'region':
+        return (
+            os.path.join(app.config['PROCESSED_FOLDER'], 'region'),
+            os.path.join(app.config['EXPORTS_FOLDER'], 'region'),
+            'df_final_region.csv',
+        )
+    else:
+        return (
+            app.config['PROCESSED_FOLDER'],
+            app.config['EXPORTS_FOLDER'],
+            'df_final.csv',
+        )
 
 # ==================== RUTAS ====================
 
@@ -80,28 +108,37 @@ def upload_files():
         
         uploaded_files = []
         missing_files = []
-        
-        # Crear directorio si no existe
+
+        # Leer clasificación y normalizar
+        clasificacion = request.form.get('clasificacion', 'moneda').strip().lower()
+        if 'regi' in clasificacion:
+            clasificacion = 'region'
+
+        # Crear directorios necesarios
         os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-        
-        # Procesar cada archivo esperado
-        for file_key, file_name in REQUIRED_FILES.items():
+        os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], 'region'), exist_ok=True)
+
+        # Guardar clasificación para el endpoint /process
+        processing_state['last_clasificacion'] = clasificacion
+
+        # Obtener rutas de destino según clasificación
+        file_config = get_file_config(clasificacion, app.config['UPLOAD_FOLDER'])
+
+        # Procesar cada archivo
+        for file_key, file_path in file_config.items():
             if file_key in request.files:
                 file = request.files[file_key]
                 if file.filename:
-                    # Guardar con nombre esperado
-                    file_path = os.path.join(app.config['UPLOAD_FOLDER'], file_name)
+                    os.makedirs(os.path.dirname(file_path), exist_ok=True)
                     file.save(file_path)
-                    
-                    # Verificar tamaño
                     file_size = os.path.getsize(file_path)
                     uploaded_files.append({
-                        'name': file_name,
+                        'name': os.path.basename(file_path),
                         'size': f"{file_size / (1024*1024):.2f} MB",
                         'path': file_path
                     })
             else:
-                missing_files.append(file_name)
+                missing_files.append(os.path.basename(file_path))
         
         if missing_files:
             return jsonify({
@@ -139,12 +176,18 @@ def process_pipeline():
                 'message': 'Ya hay un procesamiento en curso'
             }), 409
         
+        # Leer clasificación (del body o de la última subida)
+        data = request.get_json() or {}
+        clasificacion = data.get('clasificacion', processing_state.get('last_clasificacion', 'moneda')).strip().lower()
+        if 'regi' in clasificacion:
+            clasificacion = 'region'
+
         # Verificar que los archivos existen
+        file_config = get_file_config(clasificacion, app.config['UPLOAD_FOLDER'])
         missing = []
-        for file_name in REQUIRED_FILES.values():
-            file_path = os.path.join(app.config['UPLOAD_FOLDER'], file_name)
+        for file_path in file_config.values():
             if not os.path.exists(file_path):
-                missing.append(file_name)
+                missing.append(os.path.basename(file_path))
         
         if missing:
             return jsonify({
@@ -159,13 +202,14 @@ def process_pipeline():
             'progress': 0,
             'message': 'Iniciando pipeline...',
             'job_id': job_id,
+            'clasificacion': clasificacion,
             'start_time': datetime.now().isoformat(),
             'end_time': None,
             'error': None
         })
         
         # Ejecutar en thread
-        thread = threading.Thread(target=run_pipeline_background)
+        thread = threading.Thread(target=run_pipeline_background, args=(clasificacion,))
         thread.daemon = True
         thread.start()
         
@@ -183,80 +227,100 @@ def process_pipeline():
             'message': f'Error al iniciar pipeline: {str(e)}'
         }), 500
 
-def run_pipeline_background():
+def run_pipeline_background(clasificacion='moneda'):
     """Ejecutar el pipeline en background (llamado por thread)."""
     global processing_state
     
     try:
         import sys
         sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-        
-        from src.extractors.moneda.load_instruments import load_df_instruments
-        from src.extractors.moneda.load_allocations import load_allocations_nuevas, load_allocations_antiguas
-        from src.logic.moneda.clasificacion import ejecutar_pipeline_completo
-        
-        # Actualizar progreso
+
         processing_state['progress'] = 10
         processing_state['message'] = 'Cargando instrumentos...'
+
+        file_config = get_file_config(clasificacion, app.config['UPLOAD_FOLDER'])
+        pos_path     = file_config['posiciones']
+        instr_path   = file_config['instruments']
+        nuevas_path  = file_config['allocations_nuevas']
+        antiguas_path = file_config['allocations_antiguas']
+
+        if clasificacion == 'region':
+            from src.extractors.region.load_instruments_region import load_instruments_region
+            from src.extractors.region.load_allocations_region import (
+                load_allocations_nuevas_region, load_allocations_antiguas_region
+            )
+            from src.logic.region.clasificacion_region import ejecutar_pipeline_completo_region
+
+            df_instruments = load_instruments_region(pos_path, instr_path)
+
+            processing_state['progress'] = 30
+            processing_state['message'] = 'Cargando allocations nuevas...'
+            df_nuevas = load_allocations_nuevas_region(df_instruments, nuevas_path, umbral=0.9)
+
+            processing_state['progress'] = 50
+            processing_state['message'] = 'Cargando allocations antiguas...'
+            df_antiguas = load_allocations_antiguas_region(df_instruments, antiguas_path)
+
+            processing_state['progress'] = 70
+            processing_state['message'] = 'Ejecutando pipeline de región...'
+            resultados = ejecutar_pipeline_completo_region(df_instruments, df_nuevas, df_antiguas)
+
+            exports       = resultados['exports']
+            df_final      = resultados['df_final']
+            proc_folder   = os.path.join(app.config['PROCESSED_FOLDER'], 'region')
+            exp_folder    = os.path.join(app.config['EXPORTS_FOLDER'],   'region')
+            df_final_name = 'df_final_region.csv'
+
+        else:  # moneda
+            from src.extractors.moneda.load_instruments import load_df_instruments
+            from src.extractors.moneda.load_allocations import load_allocations_nuevas, load_allocations_antiguas
+            from src.logic.moneda.clasificacion import ejecutar_pipeline_completo
         
-        # Cargar datos
-        pos_path = os.path.join(app.config['UPLOAD_FOLDER'], 'posiciones.csv')
-        instr_path = os.path.join(app.config['UPLOAD_FOLDER'], 'instruments.csv')
-        nuevas_path = os.path.join(app.config['UPLOAD_FOLDER'], 'allocations_nuevas.csv')
-        antiguas_path = os.path.join(app.config['UPLOAD_FOLDER'], 'allocations_currency.csv')
-        
-        df_instruments = load_df_instruments(pos_path, instr_path)
-        
-        processing_state['progress'] = 30
-        processing_state['message'] = 'Cargando allocations nuevas...'
-        
-        df_nuevas = load_allocations_nuevas(df_instruments, nuevas_path, umbral=0.9)
-        
-        processing_state['progress'] = 50
-        processing_state['message'] = 'Cargando allocations antiguas...'
-        
-        df_antiguas = load_allocations_antiguas(df_instruments, antiguas_path)
-        
-        processing_state['progress'] = 70
-        processing_state['message'] = 'Ejecutando pipeline de clasificación...'
-        
-        # Ejecutar pipeline completo
-        resultados = ejecutar_pipeline_completo(df_instruments, df_nuevas, df_antiguas)
-        
+            df_instruments = load_df_instruments(pos_path, instr_path)
+
+            processing_state['progress'] = 30
+            processing_state['message'] = 'Cargando allocations nuevas...'
+            df_nuevas = load_allocations_nuevas(df_instruments, nuevas_path, umbral=0.9)
+
+            processing_state['progress'] = 50
+            processing_state['message'] = 'Cargando allocations antiguas...'
+            df_antiguas = load_allocations_antiguas(df_instruments, antiguas_path)
+
+            processing_state['progress'] = 70
+            processing_state['message'] = 'Ejecutando pipeline de clasificación...'
+            resultados = ejecutar_pipeline_completo(df_instruments, df_nuevas, df_antiguas)
+
+            exports       = resultados['exports']
+            df_final      = resultados['df_final']
+            proc_folder   = app.config['PROCESSED_FOLDER']
+            exp_folder    = app.config['EXPORTS_FOLDER']
+            df_final_name = 'df_final.csv'
+
+        # ── Guardar resultados ──
         processing_state['progress'] = 90
         processing_state['message'] = 'Guardando resultados...'
-        
-        # Guardar resultados procesados
-        os.makedirs(app.config['PROCESSED_FOLDER'], exist_ok=True)
-        os.makedirs(app.config['EXPORTS_FOLDER'], exist_ok=True)
-        
-        # Guardar dataframes
-        resultados['df_final'].to_csv(
-            os.path.join(app.config['PROCESSED_FOLDER'], 'df_final.csv'),
-            index=False,
-            sep=';',
-            encoding='utf-8'
-        )
-        
-        # Guardar exports
-        for key, df in resultados['exports'].items():
-            export_path = os.path.join(app.config['EXPORTS_FOLDER'], f'export_{key}.csv')
-            df.to_csv(export_path, index=False, sep=';', encoding='utf-8')
-        
-        # Guardar resumen como JSON para fácil acceso desde el frontend
+
+        os.makedirs(proc_folder, exist_ok=True)
+        os.makedirs(exp_folder,  exist_ok=True)
+
+        df_final.to_csv(os.path.join(proc_folder, df_final_name), index=False, sep=';', encoding='utf-8')
+
+        for key, df_exp in exports.items():
+            df_exp.to_csv(os.path.join(exp_folder, f'export_{key}.csv'), index=False, sep=';', encoding='utf-8')
+
         summary = {
-            'total_instrumentos': len(resultados['df_final']),
-            'balanceados': len(resultados['exports']['balanceados']),
-            'no_balanceados': len(resultados['exports']['no_balanceados']),
-            'con_cambios': len(resultados['exports']['con_cambios']),
-            'sin_datos': len(resultados['exports']['sin_datos']),
+            'total_instrumentos': len(df_final),
+            'balanceados':   len(exports.get('balanceados',   [])),
+            'no_balanceados': len(exports.get('no_balanceados', [])),
+            'con_cambios':   len(exports.get('con_cambios',   [])),
+            'sin_datos':     len(exports.get('sin_datos',     [])),
+            'clasificacion': clasificacion,
             'timestamp': datetime.now().isoformat()
         }
-        
-        with open(os.path.join(app.config['PROCESSED_FOLDER'], 'summary.json'), 'w') as f:
+
+        with open(os.path.join(proc_folder, 'summary.json'), 'w') as f:
             json.dump(summary, f, indent=2)
-        
-        # Completar
+
         processing_state.update({
             'status': 'completed',
             'progress': 100,
@@ -286,7 +350,8 @@ def get_validation_results():
     Retorna el df_final procesado con columnas mapeadas para el frontend.
     """
     try:
-        df_final_path = os.path.join(app.config['PROCESSED_FOLDER'], 'df_final.csv')
+        proc_folder, _, df_final_name = get_result_paths()
+        df_final_path = os.path.join(proc_folder, df_final_name)
         
         if not os.path.exists(df_final_path):
             return jsonify({
@@ -297,16 +362,10 @@ def get_validation_results():
         import pandas as pd
         df = pd.read_csv(df_final_path, sep=';', encoding='utf-8')
         
-        # El pipeline ya genera todas las columnas necesarias
-        # Solo enviamos los datos tal cual sin transformaciones
-        
-        # Convertir a formato JSON para el frontend
-        # Reemplazar NaN con None para evitar errores de serialización JSON
         df = df.astype(object).where(pd.notna(df), None)
         data = df.to_dict(orient='records')
         
-        # Leer resumen si existe
-        summary_path = os.path.join(app.config['PROCESSED_FOLDER'], 'summary.json')
+        summary_path = os.path.join(proc_folder, 'summary.json')
         summary = {}
         if os.path.exists(summary_path):
             with open(summary_path, 'r') as f:
@@ -333,7 +392,8 @@ def get_export_data(export_type):
     export_type: balanceados, no_balanceados, con_cambios, sin_datos
     """
     try:
-        export_path = os.path.join(app.config['EXPORTS_FOLDER'], f'export_{export_type}.csv')
+        _, exp_folder, _ = get_result_paths()
+        export_path = os.path.join(exp_folder, f'export_{export_type}.csv')
         
         if not os.path.exists(export_path):
             return jsonify({
@@ -370,7 +430,8 @@ def download_export(export_type):
     export_type: balanceados, no_balanceados, con_cambios, sin_datos
     """
     try:
-        export_path = os.path.join(app.config['EXPORTS_FOLDER'], f'export_{export_type}.csv')
+        _, exp_folder, _ = get_result_paths()
+        export_path = os.path.join(exp_folder, f'export_{export_type}.csv')
         
         if not os.path.exists(export_path):
             return jsonify({
@@ -449,7 +510,8 @@ def download_filtered_export(export_type):
         id_set = set(map(str, instrument_ids))
         
         # Ruta del archivo export original
-        export_path = os.path.join(app.config['EXPORTS_FOLDER'], f'export_{export_type}.csv')
+        _, exp_folder, _ = get_result_paths()
+        export_path = os.path.join(exp_folder, f'export_{export_type}.csv')
         
         if not os.path.exists(export_path):
             return jsonify({

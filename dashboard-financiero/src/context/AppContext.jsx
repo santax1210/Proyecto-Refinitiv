@@ -26,6 +26,9 @@ export function AppProvider({ children }) {
      */
     const uploadAndProcess = useCallback(async (files) => {
         try {
+            // Extraer clasificación del objeto de archivos
+            const { clasificacion = 'moneda', ...fileMap } = files;
+
             // Limpiar revisiones guardadas del procesamiento anterior
             try { localStorage.removeItem('allocations_revisiones'); } catch { /* ignorar */ }
 
@@ -38,7 +41,7 @@ export function AppProvider({ children }) {
             });
 
             // Subir archivos
-            const uploadResult = await api.uploadFiles(files);
+            const uploadResult = await api.uploadFiles(fileMap, clasificacion);
             
             if (uploadResult.status === 'error') {
                 throw new Error(uploadResult.message);
@@ -54,7 +57,7 @@ export function AppProvider({ children }) {
                 error: null,
             });
 
-            await api.startProcessing();
+            await api.startProcessing(clasificacion);
 
             // Hacer polling del estado
             await api.pollProcessingStatus((status) => {
