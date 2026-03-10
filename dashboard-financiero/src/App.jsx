@@ -2,6 +2,7 @@ import { useState } from 'react';
 import './index.css';
 
 import Sidebar from './components/Sidebar';
+import { ToastProvider } from './context/ToastContext';
 
 import GoalsSection from './components/GoalsSection';
 import CategorySection from './components/CategorySection';
@@ -52,7 +53,7 @@ function MainContent({ activePage, onNavigate, selectedId, onSelect }) {
       className="flex-1 overflow-y-auto"
       style={{ backgroundColor: '#F5F7FA' }}
     >
-      <div className="w-full min-h-full flex flex-col items-center">
+      <div key={activePage} className="page-transition w-full min-h-full flex flex-col items-center">
         {renderPage()}
       </div>
     </main>
@@ -65,15 +66,17 @@ export default function App() {
 
   return (
     <AppProvider>
-      <div className="flex h-screen overflow-hidden">
-        <Sidebar activePage={activePage} onNavigate={setActivePage} />
-        <MainContent
-          activePage={activePage}
-          onNavigate={setActivePage}
-          selectedId={selectedInstrumentId}
-          onSelect={setSelectedInstrumentId}
-        />
-      </div>
+      <ToastProvider>
+        <div className="flex h-screen overflow-hidden">
+          <Sidebar activePage={activePage} onNavigate={setActivePage} />
+          <MainContent
+            activePage={activePage}
+            onNavigate={setActivePage}
+            selectedId={selectedInstrumentId}
+            onSelect={setSelectedInstrumentId}
+          />
+        </div>
+      </ToastProvider>
     </AppProvider>
   );
 }

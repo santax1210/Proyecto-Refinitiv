@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { useToast } from '../context/ToastContext';
 
 const TEAL = '#299D91';
 const BORDER = '#DDE3E6';
@@ -15,7 +16,15 @@ const SLOTS = [
 /* ── Slot individual de archivo ── */
 function FileSlot({ slotKey, label, desc, file, onFile, onClear }) {
     const ref = useRef(null);
+    const [dragging, setDragging] = useState(false);
     const filled = !!file;
+
+    const handleDrop = (e) => {
+        e.preventDefault();
+        setDragging(false);
+        const dropped = e.dataTransfer?.files?.[0];
+        if (dropped && !filled) onFile(slotKey, dropped);
+    };
 
     return (
         <>
@@ -26,16 +35,20 @@ function FileSlot({ slotKey, label, desc, file, onFile, onClear }) {
             />
             <div
                 onClick={() => !filled && ref.current.click()}
+                onDragOver={e => { e.preventDefault(); if (!filled) setDragging(true); }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={handleDrop}
+                className={dragging ? 'drag-over' : ''}
                 style={{
                     display: 'flex', alignItems: 'center', gap: 10,
                     padding: '8px 12px', borderRadius: 10,
-                    cursor: filled ? 'default' : 'pointer',
-                    border: `1.5px ${filled ? 'solid' : 'dashed'} ${filled ? TEAL : '#C8D0D8'}`,
-                    backgroundColor: filled ? '#EBF7F6' : '#FAFBFC',
+                    cursor: filled ? 'default' : dragging ? 'copy' : 'pointer',
+                    border: `1.5px ${filled ? 'solid' : dragging ? 'solid' : 'dashed'} ${filled ? TEAL : dragging ? TEAL : '#C8D0D8'}`,
+                    backgroundColor: filled ? '#EBF7F6' : dragging ? '#E6F8F5' : '#FAFBFC',
                     transition: 'all 0.15s', minHeight: 52,
                 }}
-                onMouseEnter={e => { if (!filled) { e.currentTarget.style.borderColor = TEAL; e.currentTarget.style.backgroundColor = '#F4FDFC'; } }}
-                onMouseLeave={e => { if (!filled) { e.currentTarget.style.borderColor = '#C8D0D8'; e.currentTarget.style.backgroundColor = '#FAFBFC'; } }}
+                onMouseEnter={e => { if (!filled && !dragging) { e.currentTarget.style.borderColor = TEAL; e.currentTarget.style.backgroundColor = '#F4FDFC'; } }}
+                onMouseLeave={e => { if (!filled && !dragging) { e.currentTarget.style.borderColor = '#C8D0D8'; e.currentTarget.style.backgroundColor = '#FAFBFC'; } }}
             >
                 {/* Icono */}
                 <div style={{
@@ -72,6 +85,7 @@ function FileSlot({ slotKey, label, desc, file, onFile, onClear }) {
 
 export default function InicioPage() {
     const { clasificacion, setClasificacion, uploadAndProcess, processingState } = useApp();
+    const toast = useToast();
     const [slots, setSlots] = useState({});
     const [processing, setProcessing] = useState(false);
     const [error, setError] = useState(null);
@@ -96,8 +110,11 @@ export default function InicioPage() {
         setError(null);
         try {
             await uploadAndProcess({ ...slots });
+            toast({ message: 'Pipeline completado. Revisá los resultados en Validación.', type: 'success', duration: 5000 });
         } catch (err) {
-            setError(err.message || 'Error al procesar archivos');
+            const msg = err.message || 'Error al procesar archivos';
+            setError(msg);
+            toast({ message: msg, type: 'error' });
         } finally {
             setProcessing(false);
         }
@@ -106,7 +123,7 @@ export default function InicioPage() {
     return (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', padding: '28px 32px' }}>
             {/* ── Card split-panel ── */}
-            <div style={{
+            <div className="anim-zoom-in" style={{
                 display: 'grid', gridTemplateColumns: '260px 1fr',
                 width: '100%', maxWidth: 820,
                 backgroundColor: '#FFFFFF', borderRadius: 24,
@@ -202,18 +219,28 @@ export default function InicioPage() {
                         </div>
                     )}
 
-                    {/* Progreso */}
-                    {processing && processingState.status === 'processing' && (
+                    {/* Progreso — se oculta en cuanto el contexto reporta 'completed' */}
+                    {processing && processingState.status !== 'completed' && (
                         <div style={{ padding: '10px 14px', borderRadius: 10, backgroundColor: '#F3F6F8', border: `1px solid ${BORDER}` }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: processingState.progress > 0 ? 7 : 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
                                 <div style={{ width: 13, height: 13, border: '2px solid ' + TEAL, borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite', flexShrink: 0 }} />
-                                <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: '#525256' }}>{processingState.message || 'Procesando...'}</p>
+                                <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: '#525256', flex: 1 }}>{processingState.message || 'Procesando...'}</p>
+                                <span style={{ fontSize: 10, fontWeight: 700, color: TEAL }}>{processingState.progress || 0}%</span>
                             </div>
-                            {processingState.progress > 0 && (
-                                <div style={{ height: 3, borderRadius: 2, backgroundColor: '#E8EAED', overflow: 'hidden' }}>
-                                    <div style={{ height: '100%', width: `${processingState.progress}%`, backgroundColor: TEAL, transition: 'width 0.3s' }} />
-                                </div>
-                            )}
+                            <div style={{ height: 4, borderRadius: 2, backgroundColor: '#E8EAED', overflow: 'hidden' }}>
+                                <div style={{ height: '100%', width: `${Math.max(processingState.progress || 0, 6)}%`, backgroundColor: TEAL, transition: 'width 0.4s ease', borderRadius: 2 }} />
+                            </div>
+                        </div>
+                    )}
+                    {/* Éxito — se muestra en cuanto el contexto reporta 'completed' */}
+                    {processingState.status === 'completed' && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, backgroundColor: '#F0FDF4', border: '1px solid #86EFAC', animation: 'fadeSlideUp 0.4s ease both' }}>
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22C55E" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                                style={{ flexShrink: 0, animation: 'successPop 0.45s cubic-bezier(0.34,1.5,0.64,1) both' }}>
+                                <circle cx="12" cy="12" r="10" />
+                                <polyline points="9 12 11 14 15 10" />
+                            </svg>
+                            <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: '#166534' }}>Pipeline completado. Revisá los resultados.</p>
                         </div>
                     )}
 
@@ -222,7 +249,18 @@ export default function InicioPage() {
 
                     {/* Botón procesar */}
                     <button
-                        onClick={handleProcess}
+                        onClick={(e) => {
+                            if (allReady && !processing) {
+                                const btn = e.currentTarget;
+                                const rect = btn.getBoundingClientRect();
+                                const size = Math.max(rect.width, rect.height) * 2;
+                                const span = document.createElement('span');
+                                span.style.cssText = `width:${size}px;height:${size}px;left:${e.clientX - rect.left - size / 2}px;top:${e.clientY - rect.top - size / 2}px;position:absolute;border-radius:50%;background:rgba(255,255,255,0.28);animation:ripple 0.6s linear;pointer-events:none;`;
+                                btn.appendChild(span);
+                                setTimeout(() => span.remove(), 700);
+                            }
+                            handleProcess();
+                        }}
                         disabled={!allReady || processing}
                         style={{
                             width: '100%', padding: '11px', borderRadius: 12, border: 'none',
@@ -231,6 +269,7 @@ export default function InicioPage() {
                             color: allReady && !processing ? '#FFFFFF' : '#9F9F9F',
                             cursor: allReady && !processing ? 'pointer' : 'not-allowed',
                             transition: 'background-color 0.15s',
+                            position: 'relative', overflow: 'hidden',
                         }}
                         onMouseEnter={e => { if (allReady && !processing) e.currentTarget.style.backgroundColor = '#227d73'; }}
                         onMouseLeave={e => { if (allReady && !processing) e.currentTarget.style.backgroundColor = TEAL; }}

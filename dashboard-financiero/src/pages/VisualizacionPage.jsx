@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
+import { useToast } from '../context/ToastContext';
 import { getInstrumentDetail } from '../services/apiService';
 
 /* ── Paleta ── */
@@ -77,9 +78,10 @@ function AnimStyles() {
 /* ══════════════════════════════════════════════
    MetricCard — ultra-compacta (horizontal layout)
 ══════════════════════════════════════════════ */
-function MetricCard({ label, value, sub, accent = TEAL, icon }) {
+function MetricCard({ label, value, sub, accent = TEAL, icon, tooltip }) {
+    const [showTip, setShowTip] = useState(false);
     return (
-        <div style={{
+        <div className="card-hover" style={{
             flex: '1 1 0', minWidth: 130,
             backgroundColor: '#FFFFFF',
             borderRadius: 12, border: '1px solid #DDE3E6',
@@ -89,8 +91,29 @@ function MetricCard({ label, value, sub, accent = TEAL, icon }) {
         }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <p style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#9F9F9F', margin: 0 }}>{label}</p>
-                <div style={{ width: 22, height: 22, borderRadius: 6, backgroundColor: accent + '18', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {icon}
+                <div
+                    style={{ position: 'relative' }}
+                    onMouseEnter={() => tooltip && setShowTip(true)}
+                    onMouseLeave={() => setShowTip(false)}
+                >
+                    <div style={{ width: 22, height: 22, borderRadius: 6, backgroundColor: accent + '18', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: tooltip ? 'help' : 'default' }}>
+                        {icon}
+                    </div>
+                    {showTip && tooltip && (
+                        <div style={{
+                            position: 'absolute', bottom: 'calc(100% + 7px)', right: 0,
+                            backgroundColor: '#191919', color: '#FFFFFF',
+                            fontSize: 11, fontWeight: 500, lineHeight: 1.45,
+                            padding: '7px 10px', borderRadius: 8,
+                            zIndex: 60, width: 190,
+                            boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
+                            animation: 'fadeIn 0.15s ease both',
+                            pointerEvents: 'none',
+                        }}>
+                            {tooltip}
+                            <span style={{ position: 'absolute', top: '100%', right: 8, width: 0, height: 0, borderStyle: 'solid', borderWidth: '5px 5px 0', borderColor: '#191919 transparent transparent' }} />
+                        </div>
+                    )}
                 </div>
             </div>
             <p style={{ fontSize: 20, fontWeight: 800, color: '#191919', margin: 0, lineHeight: 1.1 }}>{value}</p>
@@ -103,6 +126,7 @@ function MetricCard({ label, value, sub, accent = TEAL, icon }) {
    Bar Chart — Antigua vs Nueva (top 5 clases)
 ══════════════════════════════════════════════ */
 function BarChart({ breakdownAntigua, breakdownNueva, label }) {
+    const [tipBar, setTipBar] = useState(null);
     const allClases = [...new Set([
         ...breakdownAntigua.map(d => d.clase),
         ...breakdownNueva.map(d => d.clase),
@@ -130,7 +154,7 @@ function BarChart({ breakdownAntigua, breakdownNueva, label }) {
 
     return (
         <div style={{ width: '100%', overflowX: 'auto' }}>
-            <svg width="100%" viewBox={`0 0 ${totalW + 40} ${chartH + 56}`} style={{ display: 'block', minWidth: 280 }}>
+            <svg width="100%" viewBox={`0 0 ${totalW + 40} ${chartH + 56}`} style={{ display: 'block', minWidth: 280, overflow: 'visible' }}>
                 {[0, 0.5, 1].map((t, i) => {
                     const val = Math.round(maxVal * t);
                     const y = chartH - (val / maxVal) * chartH + 20;
@@ -147,10 +171,16 @@ function BarChart({ breakdownAntigua, breakdownNueva, label }) {
                     const hN = (Math.abs(d.nueva) / maxVal) * chartH;
                     return (
                         <g key={d.clase}>
-                            <rect x={x} y={chartH - hA + 20} width={barW} height={Math.max(hA, 1)} rx="3" fill={TEAL} fillOpacity="0.9"
-                                style={{ transformBox: 'fill-box', transformOrigin: 'bottom', animation: 'growBar 0.5s cubic-bezier(0.34,1.4,0.64,1) both', animationDelay: `${i * 0.07}s` }} />
-                            <rect x={x + barW + gap} y={chartH - hN + 20} width={barW} height={Math.max(hN, 1)} rx="3" fill={PURPLE} fillOpacity="0.85"
-                                style={{ transformBox: 'fill-box', transformOrigin: 'bottom', animation: 'growBar 0.5s cubic-bezier(0.34,1.4,0.64,1) both', animationDelay: `${i * 0.07 + 0.035}s` }} />
+                            <rect x={x} y={chartH - hA + 20} width={barW} height={Math.max(hA, 1)} rx="3" fill={TEAL}
+                                fillOpacity={tipBar?.idx === i && tipBar?.type === 'a' ? 1 : 0.9}
+                                style={{ transformBox: 'fill-box', transformOrigin: 'bottom', animation: 'growBar 0.5s cubic-bezier(0.34,1.4,0.64,1) both', animationDelay: `${i * 0.07}s`, transition: 'fill-opacity 0.15s', cursor: 'crosshair' }}
+                                onMouseEnter={() => d.antigua > 0 && setTipBar({ idx: i, type: 'a', val: d.antigua, x: x + barW / 2, y: chartH - hA + 20 })}
+                                onMouseLeave={() => setTipBar(null)} />
+                            <rect x={x + barW + gap} y={chartH - hN + 20} width={barW} height={Math.max(hN, 1)} rx="3" fill={PURPLE}
+                                fillOpacity={tipBar?.idx === i && tipBar?.type === 'n' ? 1 : 0.85}
+                                style={{ transformBox: 'fill-box', transformOrigin: 'bottom', animation: 'growBar 0.5s cubic-bezier(0.34,1.4,0.64,1) both', animationDelay: `${i * 0.07 + 0.035}s`, transition: 'fill-opacity 0.15s', cursor: 'crosshair' }}
+                                onMouseEnter={() => d.nueva > 0 && setTipBar({ idx: i, type: 'n', val: d.nueva, x: x + barW + gap + barW / 2, y: chartH - hN + 20 })}
+                                onMouseLeave={() => setTipBar(null)} />
                             <text x={x + barW / 2} y={Math.min(chartH - hA + 15, chartH + 15)} textAnchor="middle" fontSize="7" fill={TEAL} fontWeight="700"
                                 style={{ animation: 'fadeInLegend 0.35s ease both', animationDelay: `${i * 0.07 + 0.3}s` }}>{d.antigua > 0 ? `${d.antigua}%` : ''}</text>
                             <text x={x + barW + gap + barW / 2} y={Math.min(chartH - hN + 15, chartH + 15)} textAnchor="middle" fontSize="7" fill={PURPLE} fontWeight="700"
@@ -160,6 +190,12 @@ function BarChart({ breakdownAntigua, breakdownNueva, label }) {
                         </g>
                     );
                 })}
+                {tipBar && (
+                    <g style={{ pointerEvents: 'none' }}>
+                        <rect x={tipBar.x - 25} y={tipBar.y - 23} width={50} height={18} rx={4} fill="#191919" fillOpacity={0.88} />
+                        <text x={tipBar.x} y={tipBar.y - 9} textAnchor="middle" fontSize="9" fill="#FFFFFF" fontWeight="700">{tipBar.val.toFixed(1)}%</text>
+                    </g>
+                )}
             </svg>
             <div style={{ display: 'flex', gap: 16, justifyContent: 'center', marginTop: 2 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -244,7 +280,7 @@ function PieChart({ breakdownNueva }) {
 ══════════════════════════════════════════════ */
 function SectionCard({ title, children }) {
     return (
-        <div style={{ backgroundColor: '#FFFFFF', borderRadius: 14, border: '1px solid #DDE3E6', boxShadow: '0 2px 4px rgba(0,0,0,0.04)', overflow: 'hidden' }}>
+        <div className="card-hover" style={{ backgroundColor: '#FFFFFF', borderRadius: 14, border: '1px solid #DDE3E6', boxShadow: '0 2px 4px rgba(0,0,0,0.04)', overflow: 'hidden' }}>
             <div style={{ padding: '12px 18px', borderBottom: '1px solid #F0F0F0' }}>
                 <h2 style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#191919' }}>{title}</h2>
             </div>
@@ -258,10 +294,25 @@ function SectionCard({ title, children }) {
 ══════════════════════════════════════════════ */
 export default function VisualizacionPage({ selectedId: propId, onSelect }) {
     const { validationData } = useApp();
+    const toast = useToast();
     const [selectedId, setSelectedId] = useState(propId ?? null);
     const [searchId, setSearchId] = useState('');
     const [detail, setDetail] = useState(null);
     const [loadingDetail, setLoadingDetail] = useState(false);
+    // Revisiones state (localStorage, shared with ValidacionPage)
+    const [revisiones, setRevisiones] = useState(() => {
+        try {
+            const saved = localStorage.getItem('allocations_revisiones');
+            return saved ? JSON.parse(saved) : {};
+        } catch { return {}; }
+    });
+    // Persist revisiones to localStorage
+    useEffect(() => {
+        try {
+            localStorage.setItem('allocations_revisiones', JSON.stringify(revisiones));
+        } catch {}
+    }, [revisiones]);
+
 
     // Sincronizar con selección externa (desde la tabla)
     useEffect(() => {
@@ -300,6 +351,7 @@ export default function VisualizacionPage({ selectedId: propId, onSelect }) {
         );
     }
 
+
     // Buscar fila del instrumento seleccionado
     const row = validationData.find(r => Number(r.ID) === Number(selectedId));
     if (!row) {
@@ -309,6 +361,23 @@ export default function VisualizacionPage({ selectedId: propId, onSelect }) {
             </div>
         );
     }
+    const revision = revisiones[row.ID] || 'Sin revisar';
+
+    // Compact validate/reject handlers (now have access to row)
+    const handleValidar = () => {
+        setRevisiones(prev => {
+            const next = { ...prev, [row.ID]: 'Validado' };
+            return next;
+        });
+        if (toast) toast({ message: 'Instrumento validado correctamente', type: 'success' });
+    };
+    const handleRechazar = () => {
+        setRevisiones(prev => {
+            const next = { ...prev, [row.ID]: 'Rechazado' };
+            return next;
+        });
+        if (toast) toast({ message: 'Instrumento rechazado', type: 'warning' });
+    };
 
     // Detectar pipeline (moneda vs región)
     const isMoneda = 'moneda_antigua' in row;
@@ -343,10 +412,7 @@ export default function VisualizacionPage({ selectedId: propId, onSelect }) {
 
             {/* ── Cabecera ── */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-                <div>
-                    <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#9F9F9F', margin: 0 }}>
-                        VISUALIZACIÓN · Instrumento
-                    </p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 3 }}>
                         <h1 style={{ fontSize: 16, fontWeight: 700, color: '#191919', margin: 0, lineHeight: 1.2 }}>
                             {row.Nombre}
@@ -365,6 +431,31 @@ export default function VisualizacionPage({ selectedId: propId, onSelect }) {
                         >
                             <ExternalLinkIcon />
                         </button>
+                        {/* Validar/Rechazar compact buttons */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 10 }}>
+                            <button
+                                onClick={handleValidar}
+                                disabled={revision === 'Validado'}
+                                style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '5px 10px', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: revision === 'Validado' ? 'default' : 'pointer', border: 'none', backgroundColor: '#299D91', color: '#FFFFFF', opacity: revision === 'Validado' ? 0.45 : 1, minWidth: 0 }}
+                                title="Validar instrumento"
+                            >
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 1 }}>
+                                    <polyline points="20 6 9 17 4 12" />
+                                </svg>
+                                Validar
+                            </button>
+                            <button
+                                onClick={handleRechazar}
+                                disabled={revision === 'Rechazado'}
+                                style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '5px 10px', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: revision === 'Rechazado' ? 'default' : 'pointer', border: 'none', backgroundColor: '#D94A38', color: '#FFFFFF', opacity: revision === 'Rechazado' ? 0.45 : 1, minWidth: 0 }}
+                                title="Rechazar instrumento"
+                            >
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 1 }}>
+                                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                                </svg>
+                                Rechazar
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -395,12 +486,13 @@ export default function VisualizacionPage({ selectedId: propId, onSelect }) {
             </div>
 
             {/* ══ MÉTRICAS — 4 tarjetas ══ */}
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <div className="anim-fade-slide-delay-1" style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 <MetricCard
                     label="PCT Original"
                     value={fmtPct(row.pct_original)}
                     sub="% cubierto antes del escalado"
                     accent={TEAL}
+                    tooltip="Porcentaje de la posición total cubierto por las allocations originales, antes del escalado al 100%."
                     icon={I(TEAL, <><line x1="19" y1="5" x2="5" y2="19" /><circle cx="6.5" cy="6.5" r="2.5" /><circle cx="17.5" cy="17.5" r="2.5" /></>)}
                 />
                 <MetricCard
@@ -408,6 +500,7 @@ export default function VisualizacionPage({ selectedId: propId, onSelect }) {
                     value={fmtPct(domAntigua.pct)}
                     sub={domAntigua.clase !== '-' ? `${labelClase}: ${domAntigua.clase}` : 'Sin datos'}
                     accent={PURPLE}
+                    tooltip={`Porcentaje de dominancia de la ${labelClase} en la allocación antigua.`}
                     icon={I(PURPLE, <><polyline points="22 7 13.5 15.5 8.5 10.5 2 17" /><polyline points="16 7 22 7 22 13" /></>)}
                 />
                 <MetricCard
@@ -415,6 +508,7 @@ export default function VisualizacionPage({ selectedId: propId, onSelect }) {
                     value={hasDatos ? fmtPct(domNueva.pct) : '-'}
                     sub={hasDatos && domNueva.clase !== '-' ? `${labelClase}: ${domNueva.clase}` : 'Sin datos'}
                     accent={hasDatos ? TEAL : SLATE}
+                    tooltip={`Porcentaje de dominancia de la ${labelClase} en la allocación nueva.`}
                     icon={I(hasDatos ? TEAL : SLATE, <><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></>)}
                 />
                 <MetricCard
@@ -422,15 +516,22 @@ export default function VisualizacionPage({ selectedId: propId, onSelect }) {
                     value={row['Tipo instrumento'] ?? '-'}
                     sub="Clasificación regulatoria"
                     accent={AMBER}
+                    tooltip="Clasificación regulatoria del instrumento según el maestro de instrumentos."
                     icon={I(AMBER, <><rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4" /></>)}
                 />
             </div>
 
             {/* ══ GRÁFICOS ══ */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 14 }}>
+            <div className="anim-fade-slide-delay-2" style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 14 }}>
                 <SectionCard title={`% por ${labelClase} — Antigua vs Nueva`}>
                     {loadingDetail ? (
-                        <p style={{ color: '#9F9F9F', fontSize: 12, textAlign: 'center', padding: '24px 0' }}>Cargando...</p>
+                        <div style={{ padding: '4px 0 10px' }}>
+                            <div className="skeleton" style={{ height: 120, width: '100%', borderRadius: 8 }} />
+                            <div style={{ display: 'flex', gap: 16, justifyContent: 'center', marginTop: 12 }}>
+                                <div className="skeleton" style={{ height: 12, width: 90 }} />
+                                <div className="skeleton" style={{ height: 12, width: 90 }} />
+                            </div>
+                        </div>
                     ) : !hasDatos ? (
                         <p style={{ color: '#9F9F9F', fontSize: 12, textAlign: 'center', padding: '24px 0' }}>Sin datos de composición para este instrumento</p>
                     ) : (
@@ -440,7 +541,14 @@ export default function VisualizacionPage({ selectedId: propId, onSelect }) {
 
                 <SectionCard title={`Composición ${labelClase} Nueva`}>
                     {loadingDetail ? (
-                        <p style={{ color: '#9F9F9F', fontSize: 12, textAlign: 'center', padding: '24px 0' }}>Cargando...</p>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                            <div className="skeleton" style={{ width: 148, height: 148, borderRadius: '50%', flexShrink: 0 }} />
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
+                                {[...Array(4)].map((_, i) => (
+                                    <div key={i} className="skeleton" style={{ height: 13, width: `${70 - i * 10}%` }} />
+                                ))}
+                            </div>
+                        </div>
                     ) : !hasDatos ? (
                         <p style={{ color: '#9F9F9F', fontSize: 12, textAlign: 'center', padding: '24px 0' }}>Sin datos</p>
                     ) : (

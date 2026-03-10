@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { downloadExport, downloadFilteredExport } from '../services/apiService';
+import { useToast } from '../context/ToastContext';
 
 // Formatea strings de pct_dominancia ("CLP 100.00%%" → "CLP 100%")
 function formatPctDominancia(value) {
@@ -74,16 +75,46 @@ function DotsIcon() {
 const borderBottom = { borderBottom: '1px solid #F0F0F0' };
 const borderTop = { borderTop: '1px solid #F0F0F0' };
 
+
 export default function ValidacionPage({ onNavigate, onSelect }) {
     const { validationData, loadValidationResults, summary } = useApp();
-    const [activeTab, setActiveTab] = useState('Todos');
-    const [search, setSearch] = useState('');
+    const toast = useToast();
+
+    // --- Restaurar filtros desde localStorage si existen ---
+    const getInitialFilters = () => {
+        try {
+            const saved = localStorage.getItem('allocations_filtros');
+            if (saved) {
+                const obj = JSON.parse(saved);
+                return {
+                    activeTab: obj.activeTab ?? 'Todos',
+                    search: obj.search ?? '',
+                    filterEstadoIdx: obj.filterEstadoIdx ?? null,
+                    filterVariacion: obj.filterVariacion ?? null,
+                    filterRevision: obj.filterRevision ?? null,
+                    page: obj.page ?? 1,
+                };
+            }
+        } catch {}
+        return {
+            activeTab: 'Todos',
+            search: '',
+            filterEstadoIdx: null,
+            filterVariacion: null,
+            filterRevision: null,
+            page: 1,
+        };
+    };
+    const initialFilters = getInitialFilters();
+
+    const [activeTab, setActiveTab] = useState(initialFilters.activeTab);
+    const [search, setSearch] = useState(initialFilters.search);
     const [selected, setSelected] = useState([]);
-    const [page, setPage] = useState(1);
+    const [page, setPage] = useState(initialFilters.page);
     const [showFilterMenu, setShowFilterMenu] = useState(false);
-    const [filterEstadoIdx, setFilterEstadoIdx] = useState(null);
-    const [filterVariacion, setFilterVariacion] = useState(null); // null, 'Baja', 'Alta'
-    const [filterRevision, setFilterRevision] = useState(null); // null, 'Validado', 'Rechazado', 'Sin revisar'
+    const [filterEstadoIdx, setFilterEstadoIdx] = useState(initialFilters.filterEstadoIdx);
+    const [filterVariacion, setFilterVariacion] = useState(initialFilters.filterVariacion); // null, 'Baja', 'Alta'
+    const [filterRevision, setFilterRevision] = useState(initialFilters.filterRevision); // null, 'Validado', 'Rechazado', 'Sin revisar'
     const [revisiones, setRevisiones] = useState(() => {
         try {
             const saved = localStorage.getItem('allocations_revisiones');
@@ -95,12 +126,27 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
     const [showGlosario, setShowGlosario] = useState(false);
     const rowsPerPage = 15;
 
+
     // Persistir revisiones en localStorage cada vez que cambian
     useEffect(() => {
         try {
             localStorage.setItem('allocations_revisiones', JSON.stringify(revisiones));
         } catch { /* cuota excedida u otro error, ignorar */ }
     }, [revisiones]);
+
+    // Persistir filtros en localStorage cada vez que cambian
+    useEffect(() => {
+        try {
+            localStorage.setItem('allocations_filtros', JSON.stringify({
+                activeTab,
+                search,
+                filterEstadoIdx,
+                filterVariacion,
+                filterRevision,
+                page,
+            }));
+        } catch { /* cuota excedida u otro error, ignorar */ }
+    }, [activeTab, search, filterEstadoIdx, filterVariacion, filterRevision, page]);
 
     // Cargar datos al montar el componente si no están disponibles
     useEffect(() => {
@@ -163,6 +209,7 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
     const totalGeneral = SAMPLE_DATA.reduce((s, r) => s + r.valor, 0);
     const allPageSel = paged.length > 0 && paged.every(r => selected.includes(r.id));
     const selCount = selected.length;
+    const filterKey = `${activeTab}|${search}|${filterEstadoIdx ?? ''}|${filterVariacion ?? ''}|${filterRevision ?? ''}|${page}`;
 
     const toggleAll = () => {
         if (allPageSel) setSelected(s => s.filter(id => !paged.some(r => r.id === id)));
@@ -195,18 +242,21 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
 
     const handleValidar = () => {
         if (selected.length === 0) return;
+        const count = selected.length;
         setRevisiones(prev => {
             const next = { ...prev };
             selected.forEach(id => { next[id] = 'Validado'; });
             return next;
         });
         setSelected([]);
+        toast({ message: `${count} instrumento${count !== 1 ? 's' : ''} validado${count !== 1 ? 's' : ''} correctamente`, type: 'success' });
     };
 
     // Validar todos los instrumentos filtrados que no estén ya validados
     const handleValidarTodosFiltrados = () => {
         const idsToValidate = filtered.filter(r => (revisiones[r.ID] !== 'Validado')).map(r => r.ID);
         if (idsToValidate.length === 0) return;
+        const count = idsToValidate.length;
         setRevisiones(prev => {
             const next = { ...prev };
             idsToValidate.forEach(id => { next[id] = 'Validado'; });
@@ -214,38 +264,35 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
         });
         // Si alguno estaba seleccionado, los quitamos de la selección
         setSelected(sel => sel.filter(id => !idsToValidate.includes(id)));
+        toast({ message: `${count} instrumento${count !== 1 ? 's' : ''} validado${count !== 1 ? 's' : ''} masivamente`, type: 'success', duration: 5000 });
     };
 
     const handleRechazar = () => {
         if (selected.length === 0) return;
+        const count = selected.length;
         setRevisiones(prev => {
             const next = { ...prev };
             selected.forEach(id => { next[id] = 'Rechazado'; });
             return next;
         });
         setSelected([]);
+        toast({ message: `${count} instrumento${count !== 1 ? 's' : ''} rechazado${count !== 1 ? 's' : ''}`, type: 'warning' });
     };
 
     // Manejar descarga de exports
     const handleDownload = async (exportType) => {
         try {
             setDownloading(exportType);
-            
-            // Obtener IDs de los instrumentos filtrados actualmente
             const filteredIds = filtered.map(row => row.ID);
-            
-            // Si hay filtros aplicados, usar descarga filtrada
-            // De lo contrario, descargar el archivo completo
             if (filteredIds.length < SAMPLE_DATA.length) {
                 await downloadFilteredExport(exportType, filteredIds);
-                console.log(`Export ${exportType} filtrado descargado exitosamente (${filteredIds.length} instrumentos)`);
             } else {
                 await downloadExport(exportType);
-                console.log(`Export ${exportType} completo descargado exitosamente`);
             }
+            toast({ message: `Archivo "${exportType.replace(/_/g, ' ')}" descargado correctamente`, type: 'success' });
         } catch (error) {
             console.error('Error al descargar export:', error);
-            alert(`Error al descargar el archivo: ${error.message}`);
+            toast({ message: `Error al descargar: ${error.message}`, type: 'error' });
         } finally {
             setDownloading(null);
         }
@@ -277,7 +324,7 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
 
     return (
         /* ── Página completa ── */
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '20px 28px', width: '100%', maxWidth: '1400px', margin: '0 auto' }}>
+        <div className="anim-fade-slide" style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '20px 28px', width: '100%', maxWidth: '1400px', margin: '0 auto' }}>
             {/* Modal Glosario */}
             {showGlosario && (
                 <div
@@ -338,30 +385,41 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                 </div>
             )}
 
-            {/* ── Mensaje de carga ── */}
+            {/* ── Skeleton de carga ── */}
             {loading && (
-                <div style={{ 
-                    display: 'flex', 
-                    flexDirection: 'column', 
-                    alignItems: 'center', 
-                    justifyContent: 'center', 
-                    padding: '60px 20px',
-                    backgroundColor: '#FFFFFF',
-                    borderRadius: 16,
-                    border: '1px solid #DDE3E6'
-                }}>
-                    <div style={{ 
-                        width: 40, 
-                        height: 40, 
-                        border: '3px solid #299D91', 
-                        borderTopColor: 'transparent',
-                        borderRadius: '50%',
-                        animation: 'spin 1s linear infinite',
-                        marginBottom: 16
-                    }} />
-                    <p style={{ fontSize: 14, fontWeight: 600, color: '#525256', margin: 0 }}>
-                        Cargando datos de validación...
-                    </p>
+                <div style={{ backgroundColor: '#FFFFFF', borderRadius: 16, border: '1px solid #DDE3E6', overflow: 'hidden' }}>
+                    {/* Tabs skeleton */}
+                    <div style={{ display: 'flex', gap: 16, padding: '12px 32px', borderBottom: '1px solid #F0F0F0' }}>
+                        {[80, 90, 100, 75].map((w, i) => (
+                            <div key={i} className="skeleton" style={{ height: 24, width: w, borderRadius: 6 }} />
+                        ))}
+                    </div>
+                    {/* Toolbar skeleton */}
+                    <div style={{ display: 'flex', gap: 12, padding: '10px 32px', borderBottom: '1px solid #F0F0F0', alignItems: 'center' }}>
+                        <div className="skeleton" style={{ height: 34, width: 110, borderRadius: 12 }} />
+                        <div className="skeleton" style={{ height: 34, flex: 1, borderRadius: 12 }} />
+                        <div className="skeleton" style={{ height: 34, width: 100, borderRadius: 12 }} />
+                        <div className="skeleton" style={{ height: 34, width: 108, borderRadius: 12 }} />
+                    </div>
+                    {/* Header skeleton */}
+                    <div style={{ display: 'flex', gap: 16, padding: '10px 32px', borderBottom: '1px solid #F0F0F0' }}>
+                        {[16, 120, 80, 125, 110, 110, 100].map((w, i) => (
+                            <div key={i} className="skeleton" style={{ height: 12, width: w, flexShrink: 0 }} />
+                        ))}
+                    </div>
+                    {/* Row skeletons */}
+                    {[...Array(8)].map((_, i) => (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '13px 32px', borderBottom: '1px solid #F8F8F8' }}>
+                            <div className="skeleton" style={{ width: 16, height: 16, borderRadius: 3, flexShrink: 0 }} />
+                            <div className="skeleton" style={{ width: 22, height: 22, borderRadius: 4, flexShrink: 0 }} />
+                            <div className="skeleton" style={{ flex: 1, height: 14, minWidth: 0 }} />
+                            <div className="skeleton" style={{ width: 120, height: 14, flexShrink: 0 }} />
+                            <div className="skeleton" style={{ width: 100, height: 22, borderRadius: 999, flexShrink: 0 }} />
+                            <div className="skeleton" style={{ width: 80, height: 14, flexShrink: 0 }} />
+                            <div className="skeleton" style={{ width: 80, height: 14, flexShrink: 0 }} />
+                            <div className="skeleton" style={{ width: 80, height: 14, flexShrink: 0 }} />
+                        </div>
+                    ))}
                 </div>
             )}
 
@@ -402,23 +460,62 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
             {/* ── Encabezado ── */}
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div>
-                        <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#9F9F9F', marginBottom: 4 }}>
-                            VALIDACIÓN
-                        </p>
-                        <h1 style={{ fontSize: 20, fontWeight: 700, color: '#191919', margin: 0 }}>
-                            Resultados de Allocations
-                        </h1>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                        <div>
+                            <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#9F9F9F', marginBottom: 4 }}>
+                                VALIDACIÓN
+                            </p>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                                <h1 style={{ fontSize: 20, fontWeight: 700, color: '#191919', margin: 0 }}>
+                                    Resultados de Allocations
+                                </h1>
+                                {/* Contador de validados por filtro activo */}
+                                {(() => {
+                                    let tabRows = [];
+                                    if (activeTab === 'Todos') {
+                                        tabRows = SAMPLE_DATA;
+                                    } else if (activeTab === 'Balanceado') {
+                                        tabRows = SAMPLE_DATA.filter(r => {
+                                            const clasificacionNueva = r.moneda_nueva ?? r.region_nueva;
+                                            return clasificacionNueva && clasificacionNueva.toLowerCase() === 'balanceado';
+                                        });
+                                    } else if (activeTab === 'No Balanceado') {
+                                        tabRows = SAMPLE_DATA.filter(r => {
+                                            const clasificacionNueva = r.moneda_nueva ?? r.region_nueva;
+                                            return clasificacionNueva && clasificacionNueva.toLowerCase() !== 'balanceado' && clasificacionNueva.trim() !== '' && r.Cambio !== 'Sin datos';
+                                        });
+                                    } else if (activeTab === 'Sin datos') {
+                                        tabRows = SAMPLE_DATA.filter(r => r.Cambio === 'Sin datos');
+                                    }
+                                    const validadosTab = tabRows.filter(r => revisiones[r.ID] === 'Validado').length;
+                                    return (
+                                        <span style={{
+                                            display: 'inline-flex', alignItems: 'center', gap: 5,
+                                            fontSize: 13, fontWeight: 700, color: '#299D91',
+                                            background: '#EBF7F6', borderRadius: 8, padding: '3px 12px',
+                                            marginLeft: 2
+                                        }}
+                                        title={`Instrumentos validados en "${activeTab}"`}
+                                        >
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#299D91" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 2 }}>
+                                                <polyline points="20 6 9 17 4 12" />
+                                            </svg>
+                                            {validadosTab} validados
+                                        </span>
+                                    );
+                                })()}
+                            </div>
+                        </div>
+                        {/* Botón helper glosario */}
+                        <button
+                            onClick={() => setShowGlosario(true)}
+                            title="Ver glosario de estados"
+                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, borderRadius: '50%', border: '1.5px solid #DDE3E6', backgroundColor: '#F8FAFC', color: '#9F9F9F', cursor: 'pointer', fontSize: 13, fontWeight: 700, flexShrink: 0, transition: 'all 0.15s', marginTop: 16 }}
+                            onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#EBF7F6'; e.currentTarget.style.borderColor = '#299D91'; e.currentTarget.style.color = '#299D91'; }}
+                            onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#F8FAFC'; e.currentTarget.style.borderColor = '#DDE3E6'; e.currentTarget.style.color = '#9F9F9F'; }}
+                        >?
+                        </button>
                     </div>
-                    {/* Botón helper glosario */}
-                    <button
-                        onClick={() => setShowGlosario(true)}
-                        title="Ver glosario de estados"
-                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, borderRadius: '50%', border: '1.5px solid #DDE3E6', backgroundColor: '#F8FAFC', color: '#9F9F9F', cursor: 'pointer', fontSize: 13, fontWeight: 700, flexShrink: 0, transition: 'all 0.15s', marginTop: 16 }}
-                        onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#EBF7F6'; e.currentTarget.style.borderColor = '#299D91'; e.currentTarget.style.color = '#299D91'; }}
-                        onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#F8FAFC'; e.currentTarget.style.borderColor = '#DDE3E6'; e.currentTarget.style.color = '#9F9F9F'; }}
-                    >?
-                    </button>
                 </div>
                 <div style={{ textAlign: 'right', paddingLeft: 32, flexShrink: 0 }}>
                     <p style={{ fontSize: 11, color: '#9F9F9F', margin: '0 0 2px' }}>Instrumentos</p>
@@ -436,12 +533,29 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
             {/* ════════════════════════════════════════
                 CARD COMPLETO: Tabs + Toolbar + Tabla + Footer
             ════════════════════════════════════════ */}
-            <div style={{ width: '100%', backgroundColor: '#FFFFFF', borderRadius: 16, border: '1px solid #DDE3E6', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
+            <div className="card-hover" style={{ width: '100%', backgroundColor: '#FFFFFF', borderRadius: 16, border: '1px solid #DDE3E6', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
 
                 {/* ── Tabs row ── */}
                 <div style={{ display: 'flex', alignItems: 'center', ...borderBottom }}>
                     {TABS.map(tab => {
-                        const count = tab === 'Todos' ? SAMPLE_DATA.length : SAMPLE_DATA.filter(r => r.estado === tab).length;
+                        // Filtrar instrumentos por tab
+                        let tabRows = [];
+                        if (tab === 'Todos') {
+                            tabRows = SAMPLE_DATA;
+                        } else if (tab === 'Balanceado') {
+                            tabRows = SAMPLE_DATA.filter(r => {
+                                const clasificacionNueva = r.moneda_nueva ?? r.region_nueva;
+                                return clasificacionNueva && clasificacionNueva.toLowerCase() === 'balanceado';
+                            });
+                        } else if (tab === 'No Balanceado') {
+                            tabRows = SAMPLE_DATA.filter(r => {
+                                const clasificacionNueva = r.moneda_nueva ?? r.region_nueva;
+                                return clasificacionNueva && clasificacionNueva.toLowerCase() !== 'balanceado' && clasificacionNueva.trim() !== '' && r.Cambio !== 'Sin datos';
+                            });
+                        } else if (tab === 'Sin datos') {
+                            tabRows = SAMPLE_DATA.filter(r => r.Cambio === 'Sin datos');
+                        }
+                        const count = tabRows.length;
                         const isActive = activeTab === tab;
                         return (
                             <button
@@ -592,7 +706,7 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                         <button
                             onClick={handleValidar}
                             disabled={selCount === 0}
-                            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 20px', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: selCount === 0 ? 'default' : 'pointer', border: 'none', backgroundColor: '#299D91', color: '#FFFFFF', flexShrink: 0, transition: 'all 0.15s', opacity: selCount === 0 ? 0.45 : 1 }}
+                            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: selCount === 0 ? 'default' : 'pointer', border: 'none', backgroundColor: '#299D91', color: '#FFFFFF', flexShrink: 0, transition: 'all 0.15s', opacity: selCount === 0 ? 0.45 : 1, minWidth: 0 }}
                             onMouseEnter={e => { if (selCount > 0) e.currentTarget.style.backgroundColor = '#22857a'; }}
                             onMouseLeave={e => e.currentTarget.style.backgroundColor = '#299D91'}
                         >
@@ -604,7 +718,7 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                         <button
                             onClick={handleRechazar}
                             disabled={selCount === 0}
-                            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 20px', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: selCount === 0 ? 'default' : 'pointer', border: 'none', backgroundColor: '#D94A38', color: '#FFFFFF', flexShrink: 0, transition: 'all 0.15s', opacity: selCount === 0 ? 0.45 : 1, marginLeft: 8 }}
+                            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: selCount === 0 ? 'default' : 'pointer', border: 'none', backgroundColor: '#D94A38', color: '#FFFFFF', flexShrink: 0, transition: 'all 0.15s', opacity: selCount === 0 ? 0.45 : 1, marginLeft: 6, minWidth: 0 }}
                             onMouseEnter={e => { if (selCount > 0) e.currentTarget.style.backgroundColor = '#b83c2d'; }}
                             onMouseLeave={e => e.currentTarget.style.backgroundColor = '#D94A38'}
                         >
@@ -617,7 +731,7 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                     <button
                         onClick={handleValidarTodosFiltrados}
                         disabled={filtered.filter(r => revisiones[r.ID] !== 'Validado').length === 0}
-                        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 20px', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: filtered.filter(r => revisiones[r.ID] !== 'Validado').length === 0 ? 'default' : 'pointer', border: 'none', backgroundColor: '#1e7c72', color: '#FFFFFF', flexShrink: 0, transition: 'all 0.15s', opacity: filtered.filter(r => revisiones[r.ID] !== 'Validado').length === 0 ? 0.45 : 1, marginLeft: 32 }}
+                        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: filtered.filter(r => revisiones[r.ID] !== 'Validado').length === 0 ? 'default' : 'pointer', border: 'none', backgroundColor: '#1e7c72', color: '#FFFFFF', flexShrink: 0, transition: 'all 0.15s', opacity: filtered.filter(r => revisiones[r.ID] !== 'Validado').length === 0 ? 0.45 : 1, marginLeft: 18, minWidth: 0 }}
                         title="Validar todos los instrumentos filtrados"
                         onMouseEnter={e => { if (filtered.filter(r => revisiones[r.ID] !== 'Validado').length > 0) e.currentTarget.style.backgroundColor = '#17635b'; }}
                         onMouseLeave={e => e.currentTarget.style.backgroundColor = '#1e7c72'}
@@ -645,6 +759,7 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                 </div>
 
                 {/* ── Filas ── */}
+                <div key={filterKey} style={{ animation: 'fadeIn 0.2s ease both' }}>
                 {paged.length === 0 ? (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, padding: '64px 0', color: '#9F9F9F' }}>
                         <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -761,6 +876,7 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                         </div>
                     );
                 })}
+                </div>
 
                 {/* ── Paginación ── */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `14px ${PX}px`, ...borderTop }}>

@@ -1,16 +1,34 @@
-# React + Vite
+# Dashboard Financiero (Frontend)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Este frontend está construido con React y Vite.
 
-Currently, two official plugins are available:
+## Instalación de dependencias
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+1. Entra a la carpeta del frontend:
+   
+	cd dashboard-financiero
 
-## React Compiler
+2. Instala las dependencias:
+   
+	npm install
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Ejecución en modo desarrollo
 
-## Expanding the ESLint configuration
+npm run dev
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Esto levantará el servidor de desarrollo en http://localhost:5173 (o el puerto que indique la consola).
+
+## Generar build de producción
+
+npm run build
+
+El resultado estará en la carpeta dist/.
+
+## Previsualizar build de producción
+
+npm run preview
+
+## Notas
+- No es necesario subir la carpeta node_modules ni dist al repositorio (ya están en .gitignore).
+- Si necesitas variables de entorno, crea un archivo .env siguiendo el ejemplo de .env.example (si existe).
+- Para conectar con el backend, asegúrate de que la URL de la API esté correctamente configurada en los servicios del frontend.

@@ -62,6 +62,8 @@ body,
   background-color: var(--color-neutral-100);
   color: var(--color-neutral-950);
   -webkit-font-smoothing: antialiased;
+  /* Ancho mínimo para evitar colapso en pantallas muy pequeñas */
+  min-width: 900px;
 }
 
 /* ===================================================
@@ -80,13 +82,131 @@ body,
   border-radius: 2px;
 }
 /* ===================================================
-   ANIMATIONS
+   ANIMATIONS & TRANSITIONS
    =================================================== */
 @keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* Fade-in + slide-up: entrada de páginas y componentes */
+@keyframes fadeSlideUp {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Fade-in simple */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Zoom-in suave: para cards y paneles */
+@keyframes zoomIn {
+  from { opacity: 0; transform: scale(0.97); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* Skeleton shimmer */
+@keyframes shimmer {
+  0%   { background-position: -600px 0; }
+  100% { background-position:  600px 0; }
+}
+
+/* ── Clases de entrada ─────────────────────────── */
+.anim-fade-slide {
+  animation: fadeSlideUp 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.anim-fade-slide-delay-1 {
+  animation: fadeSlideUp 0.38s 0.07s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.anim-fade-slide-delay-2 {
+  animation: fadeSlideUp 0.38s 0.14s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.anim-fade-slide-delay-3 {
+  animation: fadeSlideUp 0.38s 0.21s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.anim-zoom-in {
+  animation: zoomIn 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ── Transición de página ──────────────────────── */
+.page-transition {
+  animation: fadeSlideUp 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ── Skeleton loader ───────────────────────────── */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    #EBEBEB 25%,
+    #F5F5F5 50%,
+    #EBEBEB 75%
+  );
+  background-size: 600px 100%;
+  animation: shimmer 1.4s infinite linear;
+  border-radius: 6px;
+}
+
+/* Toast slide-in/out */
+@keyframes toastIn {
+  from { transform: translateX(110%); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+@keyframes toastOut {
+  from { transform: translateX(0);    opacity: 1; }
+  to   { transform: translateX(110%); opacity: 0; }
+}
+
+/* Ripple click effect */
+@keyframes ripple {
+  from { transform: scale(0); opacity: 0.45; }
+  to   { transform: scale(4); opacity: 0; }
+}
+
+/* Animated checkmark pop on success */
+@keyframes successPop {
+  0%   { transform: scale(0.3); opacity: 0; }
+  70%  { transform: scale(1.15); }
+  100% { transform: scale(1);   opacity: 1; }
+}
+
+/* Drag-over glow pulse */
+@keyframes dragGlow {
+  0%, 100% { box-shadow: 0 0 0 0   rgba(41,157,145,0.35); }
+  50%       { box-shadow: 0 0 0 7px rgba(41,157,145,0);    }
+}
+.drag-over {
+  animation: dragGlow 0.85s ease-in-out infinite !important;
+}
+
+/* ── Hover utilities para cards ────────────────── */
+.card-hover {
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.10) !important;
+}
+
+/* ── Hover para filas de tabla ─────────────────── */
+.row-hover {
+  transition: background-color 0.12s ease;
+}
+.row-hover:hover {
+  background-color: #F4FDFC !important;
+}
+
+/* ── Hover para botones genéricos ──────────────── */
+.btn-hover {
+  transition: transform 0.14s ease, box-shadow 0.14s ease, background-color 0.14s ease;
+}
+.btn-hover:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(41, 157, 145, 0.25);
+}
+.btn-hover:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: none;
 }
