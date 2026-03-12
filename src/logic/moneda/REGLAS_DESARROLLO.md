@@ -198,6 +198,126 @@ except Exception as e:
   ✓ Columnas de dominancia presentes
 ----------------------------------------------------------------------
 ======================= RESUMEN FINAL ===============================
+
+---
+
+## 8. Columnas del df_final
+
+| Columna | Origen | Descripción |
+|---------|--------|-------------|
+| `Nombre` | df_instruments | Nombre del instrumento |
+| `ID` | df_instruments | Identificador único |
+| `Tipo instrumento` | df_instruments | Tipo/categoría del instrumento |
+| `moneda_antigua` | df_instruments.SubMoneda | Clasificación de moneda vigente en el sistema |
+| `moneda_nueva` | df_dominancia_nuevas | Clasificación calculada en el pipeline (puede ser moneda ISO o "Balanceado") |
+| `pct_dominancia_nuevo` | df_dominancia_nuevas | Porcentaje de la moneda dominante en las nuevas allocations |
+| `pct_escalado` | df_dominancia_nuevas | Porcentaje escalado al 100% (solo positivos) |
+| `pct_original` | df_dominancia_nuevas | Porcentaje original antes de escalar |
+| `pct_dominancia_antigua` | df_dominancia_antiguas.Pct_dominancia | Porcentaje dominante en allocations antiguas (formato "MONEDA XX.XX%") |
+| `Cambio` | Calculado | "Sí" / "No" / "Sin datos" según si cambió la moneda |
+| `Estado` | Calculado | Estado_1 / Estado_2 / Estado_3 (ver sección 9) |
+| `nivel_variacion` | Calculado | "Alta" / "Baja" / None según umbrales por tipo de métrica |
+| `distancia_hellinger` | Calculado | Distancia de Hellinger (0–1) entre distribuciones antiguas y nuevas |
+| `variacion_balanceados` | Calculado | Métrica de variación solo para `moneda_nueva == "Balanceado"` |
+| `variacion_no_balanceados` | Calculado | Métrica de variación para todos los instrumentos NO balanceados |
+
+---
+
+## 9. Estados de Clasificación
+
+La columna `Estado` clasifica cada instrumento según la transición entre su moneda antigua y nueva.
+
+| Estado | Condición | Descripción |
+|--------|-----------|-------------|
+| `Estado_1` | Moneda → Misma Moneda | La clasificación no cambió (o ambas son Balanceado) |
+| `Estado_2` | Moneda → Balanceado / Balanceado → Moneda | Cambio entre moneda específica y distribución balanceada |
+| `Estado_3` | Moneda → Otra Moneda | La moneda dominante cambió a una distinta |
+| `""` (vacío) | Sin datos en alguna columna | No se puede calcular el estado |
+
+**Reglas específicas para balanceados** (`moneda_nueva == "Balanceado"`):
+- Si `Moneda:` es `"FALTA ALLOCATION"` → `Estado_3`
+- Si `moneda_antigua == "Balanceado"` → `Estado_1`
+- Si `moneda_antigua` es una moneda específica → `Estado_2`
+
+**Reglas para no balanceados** (`moneda_nueva` es una moneda ISO):
+- Si `moneda_antigua == "Balanceado"` → `Estado_2`
+- Si `moneda_antigua == moneda_nueva` → `Estado_1`
+- Si `moneda_antigua != moneda_nueva` → `Estado_3`
+
+---
+
+## 10. Métricas de Variación
+
+Todas las métricas se calculan en `crear_df_final.py` y se guardan como columnas del df_final.
+
+### 10.1 Distancia de Hellinger (`distancia_hellinger`)
+
+**Aplica a:** Todos los instrumentos.
+
+**Fórmula:**
+```
+H = (1/√2) × √(Σ(√p_i - √q_i)²)
+```
+Donde `p_i` y `q_i` son los porcentajes normalizados de cada moneda en las distribuciones antigua y nueva respectivamente.
+
+**Proceso por instrumento:**
+1. Se identifican las **top 5 monedas** de ese instrumento en allocations antiguas (excluyendo `Balanceado`, `Otros`, `N/A`, `Global`).
+2. Se extrae la distribución de esas 5 monedas en allocations antiguas.
+3. Se extrae la distribución de las **mismas** 5 monedas en allocations nuevas (0% si no aparece).
+4. Ambas distribuciones se normalizan al 100%.
+5. Se calcula H con la fórmula anterior.
+
+**Rango:** 0.0 (sin cambio) – 1.0 (cambio máximo / sin datos nuevos).
+
+**Funciones:** `obtener_top_monedas_por_instrumento`, `calcular_distancia_hellinger`, `calcular_hellinger_por_instrumento`.
+
+---
+
+### 10.2 Variación Balanceados (`variacion_balanceados`)
+
+**Aplica a:** Solo instrumentos con `moneda_nueva == "Balanceado"`.
+
+La métrica varía según el `Estado`:
+
+| Estado | Fórmula | Descripción |
+|--------|---------|-------------|
+| `Estado_1` (Bal→Bal) | Distancia de Hellinger | Compara las dos distribuciones |
+| `Estado_2` (Mon→Bal) | `\|pct_antiguo - pct_misma_moneda_en_nueva\| / 100` | Cuánto cayó la moneda dominante antigua en la nueva distribución |
+| Otros / Sin datos | `None` | No aplica |
+
+**Ejemplo Estado_2:** CLP 100% antigua → CLP 18.3% nueva → `variacion = 0.817`
+
+**Función:** `calcular_variacion_balanceados`.
+
+---
+
+### 10.3 Variación No Balanceados (`variacion_no_balanceados`)
+
+**Aplica a:** Todos los instrumentos con `moneda_nueva != "Balanceado"`.
+
+**Fórmula (misma para todos los Estados):**
+```
+variacion = |pct_moneda_dominante_antigua - pct_misma_moneda_en_nueva| / 100
+```
+
+Los porcentajes de nuevas allocations se escalan al 100% (solo positivos) antes de comparar.
+
+**Función:** `calcular_variacion_no_balanceados`.
+
+---
+
+### 10.4 Nivel de Variación (`nivel_variacion`)
+
+Clasificación binaria calculada a partir de las métricas anteriores:
+
+| Tipo de instrumento | Métrica usada | Umbral Baja | Umbral Alta |
+|---------------------|---------------|-------------|-------------|
+| Balanceado Estado_1 (Bal→Bal) | Hellinger | ≤ 0.30 | > 0.30 |
+| Balanceado Estado_2 (Mon→Bal) | Variación % | ≤ 0.40 | > 0.40 |
+| No balanceado (todos los Estados) | Variación % | ≤ 0.40 | > 0.40 |
+| Sin métricas calculadas | — | — | `None` |
+
+**Función:** `calcular_nivel_variacion`.
 ----------------------------------------------------------------------
 Total instrumentos: 1050
 Balanceados: 200

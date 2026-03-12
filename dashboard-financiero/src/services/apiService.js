@@ -111,24 +111,42 @@ export async function getProcessingStatus() {
  * @param {Function} onProgress - Callback para actualizar progreso (recibe el estado)
  * @param {Number} interval - Intervalo de polling en ms (default: 2000)
  */
-export async function pollProcessingStatus(onProgress, interval = 2000) {
+export async function pollProcessingStatus(onProgress, interval = 2000, timeoutMs = 300000) {
     return new Promise((resolve, reject) => {
+        const startTime = Date.now();
+        let lastProcessingTime = Date.now();
+
         const pollInterval = setInterval(async () => {
             try {
                 const status = await getProcessingStatus();
-                
+
                 // Llamar callback con el estado actualizado
                 if (onProgress) {
                     onProgress(status);
                 }
-                
+
                 // Si completó o hubo error, detener polling
                 if (status.status === 'completed') {
                     clearInterval(pollInterval);
                     resolve(status);
+                    return;
                 } else if (status.status === 'error') {
                     clearInterval(pollInterval);
                     reject(new Error(status.error || 'Error en el procesamiento'));
+                    return;
+                } else if (status.status === 'processing') {
+                    lastProcessingTime = Date.now();
+                } else if (status.status === 'idle' && (Date.now() - lastProcessingTime) > 5000) {
+                    // El backend volvió a idle inesperadamente (ej: reloader de Flask lo reinició)
+                    clearInterval(pollInterval);
+                    reject(new Error('El procesamiento se interrumpió inesperadamente. Intentá de nuevo.'));
+                    return;
+                }
+
+                // Timeout global de seguridad
+                if (Date.now() - startTime > timeoutMs) {
+                    clearInterval(pollInterval);
+                    reject(new Error('Timeout: el procesamiento tardó demasiado. Intentá de nuevo.'));
                 }
             } catch (error) {
                 clearInterval(pollInterval);

@@ -31,9 +31,9 @@ def test_estructura_resultados():
     print("="*70)
     
     # Cargar datos
-    df_instr = load_df_instruments('data/raw/posiciones.csv', 'data/raw/instruments.csv')
-    df_nuevas = load_allocations_nuevas(df_instr, 'data/raw/allocations_nuevas.csv', umbral=0.9)
-    df_antiguas = load_allocations_antiguas(df_instr, 'data/raw/allocations_currency.csv')
+    df_instr = load_df_instruments('data/raw/moneda/posiciones.csv', 'data/raw/moneda/instruments.csv')
+    df_nuevas = load_allocations_nuevas(df_instr, 'data/raw/moneda/allocations_nuevas.csv', umbral=0.9)
+    df_antiguas = load_allocations_antiguas(df_instr, 'data/raw/moneda/allocations_currency.csv')
     
     # Ejecutar pipeline
     resultados = ejecutar_pipeline_completo(df_instr, df_nuevas, df_antiguas)
@@ -81,9 +81,9 @@ def test_columnas_df_final():
     print("="*70)
     
     # Cargar datos y ejecutar pipeline
-    df_instr = load_df_instruments('data/raw/posiciones.csv', 'data/raw/instruments.csv')
-    df_nuevas = load_allocations_nuevas(df_instr, 'data/raw/allocations_nuevas.csv', umbral=0.9)
-    df_antiguas = load_allocations_antiguas(df_instr, 'data/raw/allocations_currency.csv')
+    df_instr = load_df_instruments('data/raw/moneda/posiciones.csv', 'data/raw/moneda/instruments.csv')
+    df_nuevas = load_allocations_nuevas(df_instr, 'data/raw/moneda/allocations_nuevas.csv', umbral=0.9)
+    df_antiguas = load_allocations_antiguas(df_instr, 'data/raw/moneda/allocations_currency.csv')
     resultados = ejecutar_pipeline_completo(df_instr, df_nuevas, df_antiguas)
     
     df_final = resultados['df_final']
@@ -128,9 +128,9 @@ def test_serializacion_json():
     print("="*70)
     
     # Cargar datos y ejecutar pipeline
-    df_instr = load_df_instruments('data/raw/posiciones.csv', 'data/raw/instruments.csv')
-    df_nuevas = load_allocations_nuevas(df_instr, 'data/raw/allocations_nuevas.csv', umbral=0.9)
-    df_antiguas = load_allocations_antiguas(df_instr, 'data/raw/allocations_currency.csv')
+    df_instr = load_df_instruments('data/raw/moneda/posiciones.csv', 'data/raw/moneda/instruments.csv')
+    df_nuevas = load_allocations_nuevas(df_instr, 'data/raw/moneda/allocations_nuevas.csv', umbral=0.9)
+    df_antiguas = load_allocations_antiguas(df_instr, 'data/raw/moneda/allocations_currency.csv')
     resultados = ejecutar_pipeline_completo(df_instr, df_nuevas, df_antiguas)
     
     df_final = resultados['df_final']
@@ -170,9 +170,9 @@ def test_estructura_summary():
     print("="*70)
     
     # Cargar datos y ejecutar pipeline
-    df_instr = load_df_instruments('data/raw/posiciones.csv', 'data/raw/instruments.csv')
-    df_nuevas = load_allocations_nuevas(df_instr, 'data/raw/allocations_nuevas.csv', umbral=0.9)
-    df_antiguas = load_allocations_antiguas(df_instr, 'data/raw/allocations_currency.csv')
+    df_instr = load_df_instruments('data/raw/moneda/posiciones.csv', 'data/raw/moneda/instruments.csv')
+    df_nuevas = load_allocations_nuevas(df_instr, 'data/raw/moneda/allocations_nuevas.csv', umbral=0.9)
+    df_antiguas = load_allocations_antiguas(df_instr, 'data/raw/moneda/allocations_currency.csv')
     resultados = ejecutar_pipeline_completo(df_instr, df_nuevas, df_antiguas)
     
     # Simular lo que hace el backend en app.py
@@ -215,9 +215,9 @@ def test_valores_estado():
     print("="*70)
     
     # Cargar datos y ejecutar pipeline
-    df_instr = load_df_instruments('data/raw/posiciones.csv', 'data/raw/instruments.csv')
-    df_nuevas = load_allocations_nuevas(df_instr, 'data/raw/allocations_nuevas.csv', umbral=0.9)
-    df_antiguas = load_allocations_antiguas(df_instr, 'data/raw/allocations_currency.csv')
+    df_instr = load_df_instruments('data/raw/moneda/posiciones.csv', 'data/raw/moneda/instruments.csv')
+    df_nuevas = load_allocations_nuevas(df_instr, 'data/raw/moneda/allocations_nuevas.csv', umbral=0.9)
+    df_antiguas = load_allocations_antiguas(df_instr, 'data/raw/moneda/allocations_currency.csv')
     resultados = ejecutar_pipeline_completo(df_instr, df_nuevas, df_antiguas)
     
     df_final = resultados['df_final']
@@ -259,9 +259,9 @@ def test_valores_cambio():
     print("="*70)
     
     # Cargar datos y ejecutar pipeline
-    df_instr = load_df_instruments('data/raw/posiciones.csv', 'data/raw/instruments.csv')
-    df_nuevas = load_allocations_nuevas(df_instr, 'data/raw/allocations_nuevas.csv', umbral=0.9)
-    df_antiguas = load_allocations_antiguas(df_instr, 'data/raw/allocations_currency.csv')
+    df_instr = load_df_instruments('data/raw/moneda/posiciones.csv', 'data/raw/moneda/instruments.csv')
+    df_nuevas = load_allocations_nuevas(df_instr, 'data/raw/moneda/allocations_nuevas.csv', umbral=0.9)
+    df_antiguas = load_allocations_antiguas(df_instr, 'data/raw/moneda/allocations_currency.csv')
     resultados = ejecutar_pipeline_completo(df_instr, df_nuevas, df_antiguas)
     
     df_final = resultados['df_final']

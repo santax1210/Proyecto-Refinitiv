@@ -40,34 +40,42 @@ processing_state = {
     'error': None
 }
 
-# Configuración de archivos según clasificación
+
+def normalize_clasificacion(clasificacion):
+    """Normaliza aliases de clasificación a los pipelines soportados."""
+    valor = str(clasificacion or 'moneda').strip().lower()
+    if 'regi' in valor:
+        return 'region'
+    if 'indus' in valor or 'sector' in valor:
+        return 'sector'
+    return 'moneda'
+
+# Configuración de archivos (siempre los mismos 4 en data/raw/)
 def get_file_config(clasificacion, upload_folder):
-    """Devuelve {file_key: ruta_destino} según la clasificación seleccionada."""
-    region_folder = os.path.join(upload_folder, 'region')
-    if clasificacion == 'region':
-        return {
-            'posiciones':          os.path.join(upload_folder, 'posiciones.csv'),
-            'instruments':         os.path.join(upload_folder, 'instruments.csv'),
-            'allocations_nuevas':  os.path.join(region_folder, 'allocations_nuevas_region.csv'),
-            'allocations_antiguas': os.path.join(region_folder, 'allocations_region.csv'),
-        }
-    else:  # moneda (default)
-        return {
-            'posiciones':          os.path.join(upload_folder, 'posiciones.csv'),
-            'instruments':         os.path.join(upload_folder, 'instruments.csv'),
-            'allocations_nuevas':  os.path.join(upload_folder, 'allocations_nuevas.csv'),
-            'allocations_antiguas': os.path.join(upload_folder, 'allocations_currency.csv'),
-        }
+    """Devuelve {file_key: ruta_destino} - siempre los mismos 4 archivos en data/raw/."""
+    return {
+        'posiciones':           os.path.join(upload_folder, 'posiciones.csv'),
+        'instruments':          os.path.join(upload_folder, 'instruments.csv'),
+        'allocations_nuevas':   os.path.join(upload_folder, 'allocations_nuevas.csv'),
+        'allocations_antiguas': os.path.join(upload_folder, 'allocations_antiguas.csv'),
+    }
 
 def get_result_paths(clasificacion=None):
     """Devuelve (proc_folder, exp_folder, df_final_name) según la clasificación procesada."""
     if clasificacion is None:
         clasificacion = processing_state.get('clasificacion', 'moneda')
+    clasificacion = normalize_clasificacion(clasificacion)
     if clasificacion == 'region':
         return (
             os.path.join(app.config['PROCESSED_FOLDER'], 'region'),
             os.path.join(app.config['EXPORTS_FOLDER'], 'region'),
             'df_final_region.csv',
+        )
+    if clasificacion == 'sector':
+        return (
+            os.path.join(app.config['PROCESSED_FOLDER'], 'sector'),
+            os.path.join(app.config['EXPORTS_FOLDER'], 'sector'),
+            'df_final_sector.csv',
         )
     else:
         return (
@@ -110,13 +118,10 @@ def upload_files():
         missing_files = []
 
         # Leer clasificación y normalizar
-        clasificacion = request.form.get('clasificacion', 'moneda').strip().lower()
-        if 'regi' in clasificacion:
-            clasificacion = 'region'
+        clasificacion = normalize_clasificacion(request.form.get('clasificacion', 'moneda'))
 
-        # Crear directorios necesarios
+        # Crear directorio de uploads si no existe
         os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-        os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], 'region'), exist_ok=True)
 
         # Guardar clasificación para el endpoint /process
         processing_state['last_clasificacion'] = clasificacion
@@ -178,9 +183,7 @@ def process_pipeline():
         
         # Leer clasificación (del body o de la última subida)
         data = request.get_json() or {}
-        clasificacion = data.get('clasificacion', processing_state.get('last_clasificacion', 'moneda')).strip().lower()
-        if 'regi' in clasificacion:
-            clasificacion = 'region'
+        clasificacion = normalize_clasificacion(data.get('clasificacion', processing_state.get('last_clasificacion', 'moneda')))
 
         # Verificar que los archivos existen
         file_config = get_file_config(clasificacion, app.config['UPLOAD_FOLDER'])
@@ -270,6 +273,37 @@ def run_pipeline_background(clasificacion='moneda'):
             proc_folder   = os.path.join(app.config['PROCESSED_FOLDER'], 'region')
             exp_folder    = os.path.join(app.config['EXPORTS_FOLDER'],   'region')
             df_final_name = 'df_final_region.csv'
+            alloc_nuevas_name   = 'allocations_nuevas_region.csv'
+            alloc_antiguas_name = 'allocations_antiguas_region.csv'
+
+        elif clasificacion == 'sector':
+            from src.extractors.sector.load_instruments_sector import load_instruments_sector
+            from src.extractors.sector.load_allocations_sector import (
+                load_allocations_nuevas_sector, load_allocations_antiguas_sector
+            )
+            from src.logic.sector.clasificacion_sector import ejecutar_pipeline_completo_sector
+
+            df_instruments = load_instruments_sector(pos_path, instr_path)
+
+            processing_state['progress'] = 30
+            processing_state['message'] = 'Cargando allocations nuevas...'
+            df_nuevas = load_allocations_nuevas_sector(df_instruments, nuevas_path, umbral=0.9)
+
+            processing_state['progress'] = 50
+            processing_state['message'] = 'Cargando allocations antiguas...'
+            df_antiguas = load_allocations_antiguas_sector(df_instruments, antiguas_path)
+
+            processing_state['progress'] = 70
+            processing_state['message'] = 'Ejecutando pipeline de sector...'
+            resultados = ejecutar_pipeline_completo_sector(df_instruments, df_nuevas, df_antiguas)
+
+            exports       = resultados['exports']
+            df_final      = resultados['df_final']
+            proc_folder   = os.path.join(app.config['PROCESSED_FOLDER'], 'sector')
+            exp_folder    = os.path.join(app.config['EXPORTS_FOLDER'],   'sector')
+            df_final_name = 'df_final_sector.csv'
+            alloc_nuevas_name   = 'allocations_nuevas_sector.csv'
+            alloc_antiguas_name = 'allocations_antiguas_sector.csv'
 
         else:  # moneda
             from src.extractors.moneda.load_instruments import load_df_instruments
@@ -295,6 +329,8 @@ def run_pipeline_background(clasificacion='moneda'):
             proc_folder   = app.config['PROCESSED_FOLDER']
             exp_folder    = app.config['EXPORTS_FOLDER']
             df_final_name = 'df_final.csv'
+            alloc_nuevas_name   = 'allocations_nuevas.csv'
+            alloc_antiguas_name = 'allocations_antiguas.csv'
 
         # ── Guardar resultados ──
         processing_state['progress'] = 90
@@ -304,6 +340,10 @@ def run_pipeline_background(clasificacion='moneda'):
         os.makedirs(exp_folder,  exist_ok=True)
 
         df_final.to_csv(os.path.join(proc_folder, df_final_name), index=False, sep=';', encoding='utf-8')
+
+        # Guardar allocations para el endpoint de detalle de instrumento (gráficos)
+        df_nuevas.to_csv(os.path.join(proc_folder, alloc_nuevas_name), index=False, sep=';', encoding='latin-1')
+        resultados['df_antiguas'].to_csv(os.path.join(proc_folder, alloc_antiguas_name), index=False, sep=';', encoding='latin-1')
 
         for key, df_exp in exports.items():
             df_exp.to_csv(os.path.join(exp_folder, f'export_{key}.csv'), index=False, sep=';', encoding='utf-8')
@@ -461,7 +501,7 @@ def get_instrument_detail(instrument_id):
     try:
         import pandas as pd
 
-        clasificacion = processing_state.get('clasificacion', 'moneda')
+        clasificacion = normalize_clasificacion(processing_state.get('clasificacion', 'moneda'))
         proc_folder, _, _ = get_result_paths(clasificacion)
 
         TOP_N = 4  # Top 4 + "Otros"
@@ -471,6 +511,11 @@ def get_instrument_detail(instrument_id):
             antiguas_path = os.path.join(proc_folder, 'allocations_antiguas_region.csv')
             clase_col_new = 'region'
             exclude_cols = {'ID', 'Nombre', 'Pct_dominancia', 'Base Region:'}
+        elif clasificacion == 'sector':
+            nuevas_path = os.path.join(proc_folder, 'allocations_nuevas_sector.csv')
+            antiguas_path = os.path.join(proc_folder, 'allocations_antiguas_sector.csv')
+            clase_col_new = 'class'
+            exclude_cols = {'ID', 'Nombre', 'sectores', 'Pct_dominancia', 'Sectores:'}
         else:
             nuevas_path = os.path.join(proc_folder, 'allocations_nuevas.csv')
             antiguas_path = os.path.join(proc_folder, 'allocations_antiguas.csv')
@@ -712,4 +757,6 @@ if __name__ == '__main__':
     print("="*60 + "\n")
     
     # Correr servidor (debug mode solo en desarrollo)
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    # use_reloader=False es crítico: el reloader reinicia Flask al detectar cambios
+    # en archivos .pyc, lo que borra processing_state y deja el pipeline colgado.
+    app.run(debug=True, host='0.0.0.0', port=5000, use_reloader=False)

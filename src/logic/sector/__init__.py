@@ -1,0 +1,1 @@
+# Paquete de lógica para el pipeline de sector.

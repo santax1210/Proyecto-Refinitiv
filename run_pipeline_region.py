@@ -33,8 +33,8 @@ def main():
     print("="*80)
 
     # Archivos raw específicos de región
-    pos_path      = 'data/raw/posiciones.csv'
-    instr_path    = 'data/raw/instruments.csv'
+    pos_path      = 'data/raw/region/posiciones.csv'
+    instr_path    = 'data/raw/region/instruments.csv'
     nuevas_path   = 'data/raw/region/allocations_nuevas_region.csv'
     antiguas_path = 'data/raw/region/allocations_region.csv'
 

@@ -28,10 +28,10 @@ def main():
     print(f" Fecha de ejecución: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ".center(80))
     print("="*80)
 
-    pos_path      = 'data/raw/posiciones.csv'
-    instr_path    = 'data/raw/instruments.csv'
-    nuevas_path   = 'data/raw/allocations_nuevas.csv'
-    antiguas_path = 'data/raw/allocations_currency.csv'
+    pos_path      = 'data/raw/moneda/posiciones.csv'
+    instr_path    = 'data/raw/moneda/instruments.csv'
+    nuevas_path   = 'data/raw/moneda/allocations_nuevas.csv'
+    antiguas_path = 'data/raw/moneda/allocations_currency.csv'
 
     archivos_requeridos = [pos_path, instr_path, nuevas_path, antiguas_path]
     archivos_faltantes = [f for f in archivos_requeridos if not os.path.exists(f)]

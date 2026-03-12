@@ -161,11 +161,11 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
     // Usar los datos reales o array vacío si no hay datos
     const SAMPLE_DATA = validationData || [];
 
-    // Filtrado basado en moneda_nueva / region_nueva y Cambio
+    // Filtrado basado en moneda_nueva / region_nueva / sector_nueva y Cambio
     const filtered = useMemo(() =>
         SAMPLE_DATA.filter(r => {
-            // Soporta pipeline moneda (moneda_nueva) y región (region_nueva)
-            const clasificacionNueva = r.moneda_nueva ?? r.region_nueva;
+            const clasificacionNueva = r.moneda_nueva ?? r.region_nueva ?? r.sector_nueva;
+            const clasificacionAntigua = r.moneda_antigua ?? r.region_antigua ?? r.sector_antigua;
             // Filtro por Tab
             let matchTab = true;
             if (activeTab === 'Balanceado') {
@@ -199,7 +199,7 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
             const matchSearch = !search ||
                 (r.Nombre && r.Nombre.toLowerCase().includes(search.toLowerCase())) ||
                 (r.ID && r.ID.toString().toLowerCase().includes(search.toLowerCase())) ||
-                (r.moneda_antigua && r.moneda_antigua.toLowerCase().includes(search.toLowerCase()));
+                (clasificacionAntigua && clasificacionAntigua.toLowerCase().includes(search.toLowerCase()));
             
             return matchTab && matchEstadoIdx && matchVariacion && matchRevision && matchSearch;
         }), [activeTab, filterEstadoIdx, filterVariacion, filterRevision, revisiones, search, SAMPLE_DATA]); // eslint-disable-line
@@ -476,12 +476,12 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                                         tabRows = SAMPLE_DATA;
                                     } else if (activeTab === 'Balanceado') {
                                         tabRows = SAMPLE_DATA.filter(r => {
-                                            const clasificacionNueva = r.moneda_nueva ?? r.region_nueva;
+                                            const clasificacionNueva = r.moneda_nueva ?? r.region_nueva ?? r.sector_nueva;
                                             return clasificacionNueva && clasificacionNueva.toLowerCase() === 'balanceado';
                                         });
                                     } else if (activeTab === 'No Balanceado') {
                                         tabRows = SAMPLE_DATA.filter(r => {
-                                            const clasificacionNueva = r.moneda_nueva ?? r.region_nueva;
+                                            const clasificacionNueva = r.moneda_nueva ?? r.region_nueva ?? r.sector_nueva;
                                             return clasificacionNueva && clasificacionNueva.toLowerCase() !== 'balanceado' && clasificacionNueva.trim() !== '' && r.Cambio !== 'Sin datos';
                                         });
                                     } else if (activeTab === 'Sin datos') {
@@ -544,12 +544,12 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                             tabRows = SAMPLE_DATA;
                         } else if (tab === 'Balanceado') {
                             tabRows = SAMPLE_DATA.filter(r => {
-                                const clasificacionNueva = r.moneda_nueva ?? r.region_nueva;
+                                const clasificacionNueva = r.moneda_nueva ?? r.region_nueva ?? r.sector_nueva;
                                 return clasificacionNueva && clasificacionNueva.toLowerCase() === 'balanceado';
                             });
                         } else if (tab === 'No Balanceado') {
                             tabRows = SAMPLE_DATA.filter(r => {
-                                const clasificacionNueva = r.moneda_nueva ?? r.region_nueva;
+                                const clasificacionNueva = r.moneda_nueva ?? r.region_nueva ?? r.sector_nueva;
                                 return clasificacionNueva && clasificacionNueva.toLowerCase() !== 'balanceado' && clasificacionNueva.trim() !== '' && r.Cambio !== 'Sin datos';
                             });
                         } else if (tab === 'Sin datos') {

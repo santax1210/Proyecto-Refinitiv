@@ -379,10 +379,11 @@ export default function VisualizacionPage({ selectedId: propId, onSelect }) {
         if (toast) toast({ message: 'Instrumento rechazado', type: 'warning' });
     };
 
-    // Detectar pipeline (moneda vs región)
+    // Detectar pipeline (moneda vs región vs industria)
     const isMoneda = 'moneda_antigua' in row;
-    const labelClase = isMoneda ? 'Moneda' : 'Región';
-    const labelDivisas = isMoneda ? 'divisas' : 'regiones';
+    const isRegion = 'region_antigua' in row;
+    const labelClase = isMoneda ? 'Moneda' : isRegion ? 'Región' : 'Industria';
+    const labelDivisas = isMoneda ? 'divisas' : isRegion ? 'regiones' : 'industrias';
 
     // Parsear campos de dominancia
     const domAntigua = parseDominancia(row.pct_dominancia_antigua);
@@ -390,8 +391,8 @@ export default function VisualizacionPage({ selectedId: propId, onSelect }) {
     const domNueva = parseDominancia(domNuevaRaw);
 
     // Clase antigua y nueva (para el resumen bajo el pie)
-    const claseAntigua = row.moneda_antigua ?? row.region_antigua ?? '-';
-    const claseNueva = row.moneda_nueva ?? row.region_nueva ?? '-';
+    const claseAntigua = row.moneda_antigua ?? row.region_antigua ?? row.sector_antigua ?? '-';
+    const claseNueva = row.moneda_nueva ?? row.region_nueva ?? row.sector_nueva ?? '-';
 
     // Datos de los gráficos
     const breakdownAntigua = detail?.breakdown_antigua ?? [];

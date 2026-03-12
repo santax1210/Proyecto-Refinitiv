@@ -1,0 +1,1 @@
+# Paquete de extractores para el pipeline de sector.
