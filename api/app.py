@@ -21,7 +21,7 @@ from datetime import datetime
 app = Flask(__name__)
 
 # Configurar CORS para permitir requests desde el frontend React
-CORS(app, origins=['http://localhost:5173', 'http://localhost:5174'])
+CORS(app, origins=['http://localhost:5173', 'http://localhost:5174','https://allocations-handler.finantech.cl'])
 
 # Configuración
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max file size
