@@ -1,10 +1,10 @@
 /**
  * Servicio de API para conectar con el backend Flask.
  * 
- * Base URL: http://localhost:5000
+ * Base URL: /api (relativo, para producción con Nginx)
  */
 
-const API_BASE_URL = 'http://localhost:5000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 /**
  * Helper para manejar respuestas de la API
