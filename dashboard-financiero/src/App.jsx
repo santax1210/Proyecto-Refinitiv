@@ -9,7 +9,9 @@ import CategorySection from './components/CategorySection';
 import InicioPage from './pages/InicioPage';
 import ValidacionPage from './pages/ValidacionPage';
 import VisualizacionPage from './pages/VisualizacionPage';
+import LoginPage from './pages/LoginPage';
 import { AppProvider } from './context/AppContext';
+import { isAuthenticated, logout } from './services/apiService';
 
 /* ── Página de placeholder para secciones aún no construidas ── */
 function PlaceholderPage({ name }) {
@@ -61,14 +63,28 @@ function MainContent({ activePage, onNavigate, selectedId, onSelect }) {
 }
 
 export default function App() {
+  const [loggedIn, setLoggedIn] = useState(() => isAuthenticated());
   const [activePage, setActivePage] = useState('inicio');
   const [selectedInstrumentId, setSelectedInstrumentId] = useState(23);
+
+  function handleLoginSuccess() {
+    setLoggedIn(true);
+  }
+
+  function handleLogout() {
+    logout();
+    setLoggedIn(false);
+  }
+
+  if (!loggedIn) {
+    return <LoginPage onLoginSuccess={handleLoginSuccess} />;
+  }
 
   return (
     <AppProvider>
       <ToastProvider>
         <div className="flex h-screen overflow-hidden">
-          <Sidebar activePage={activePage} onNavigate={setActivePage} />
+          <Sidebar activePage={activePage} onNavigate={setActivePage} onLogout={handleLogout} />
           <MainContent
             activePage={activePage}
             onNavigate={setActivePage}
@@ -80,3 +96,4 @@ export default function App() {
     </AppProvider>
   );
 }
+

@@ -1,27 +1,95 @@
 /**
  * Servicio de API para conectar con el backend Flask.
- * 
+ *
  * Base URL: /api (relativo, para producción con Nginx)
+ *
+ * Autenticación: JWT via localStorage.
+ * - El token se guarda en localStorage bajo la clave 'auth_token'.
+ * - Cada petición (excepto /api/login) incluye el header Authorization: Bearer <token>.
+ * - Si el servidor responde 401, se limpia la sesión y se recarga la app.
  */
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
+// ==================== AUTH HELPERS ====================
+
+export function getToken() {
+    return localStorage.getItem('auth_token');
+}
+
+export function saveToken(token) {
+    localStorage.setItem('auth_token', token);
+}
+
+export function clearToken() {
+    localStorage.removeItem('auth_token');
+}
+
+export function isAuthenticated() {
+    return !!getToken();
+}
+
 /**
- * Helper para manejar respuestas de la API
+ * Login: envía credenciales y guarda el token si son correctas.
+ * @returns {Promise<{status: string, token: string}>}
+ */
+export async function login(username, password) {
+    const response = await fetch(`${API_BASE_URL}/api/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+        throw new Error(data.message || 'Error al iniciar sesión');
+    }
+    saveToken(data.token);
+    return data;
+}
+
+export function logout() {
+    clearToken();
+}
+
+// ==================== INTERNOS ====================
+
+/**
+ * Construye los headers base incluyendo el Authorization si hay token disponible.
+ */
+function authHeaders(extra = {}) {
+    const token = getToken();
+    const headers = { ...extra };
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+    return headers;
+}
+
+/**
+ * Helper para manejar respuestas de la API.
+ * Si el servidor responde 401, limpia el token y fuerza recarga para volver al login.
  */
 async function handleResponse(response) {
+    if (response.status === 401) {
+        clearToken();
+        window.location.reload();
+        throw new Error('Sesión expirada. Por favor, inicia sesión nuevamente.');
+    }
+
     const data = await response.json();
-    
+
     if (!response.ok) {
         const errorMsg = data.message || `Error HTTP ${response.status}: ${response.statusText}`;
         throw new Error(errorMsg);
     }
-    
+
     return data;
 }
 
+// ==================== ENDPOINTS ====================
+
 /**
- * Health check - Verificar que la API está funcionando
+ * Health check - Verificar que la API está funcionando (no requiere token)
  */
 export async function checkHealth() {
     try {
@@ -35,28 +103,28 @@ export async function checkHealth() {
 
 /**
  * Subir archivos CSV al backend
- * 
+ *
  * @param {Object} files - Objeto con los archivos a subir
  * @param {string} clasificacion - Tipo de clasificación ('Moneda', 'Región', 'Industria')
  */
 export async function uploadFiles(files, clasificacion = 'moneda') {
     try {
         const formData = new FormData();
-        
-        // Agregar archivos al FormData con los nombres esperados por el backend
+
         if (files.posiciones) formData.append('posiciones', files.posiciones);
         if (files.instruments) formData.append('instruments', files.instruments);
         if (files.allocations_nuevas) formData.append('allocations_nuevas', files.allocations_nuevas);
         if (files.allocations_antiguas) formData.append('allocations_antiguas', files.allocations_antiguas);
         formData.append('clasificacion', clasificacion);
-        
+
         console.log('Subiendo archivos:', Object.keys(files));
-        
+
         const response = await fetch(`${API_BASE_URL}/api/upload`, {
             method: 'POST',
+            headers: authHeaders(),   // SIN Content-Type: browser lo pone solo para multipart
             body: formData,
         });
-        
+
         return await handleResponse(response);
     } catch (error) {
         console.error('Error al subir archivos:', error);
@@ -76,12 +144,10 @@ export async function startProcessing(clasificacion = 'moneda') {
         console.log('Iniciando procesamiento del pipeline:', clasificacion);
         const response = await fetch(`${API_BASE_URL}/api/process`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: authHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({ clasificacion }),
         });
-        
+
         return await handleResponse(response);
     } catch (error) {
         console.error('Error al iniciar procesamiento:', error);
@@ -97,7 +163,9 @@ export async function startProcessing(clasificacion = 'moneda') {
  */
 export async function getProcessingStatus() {
     try {
-        const response = await fetch(`${API_BASE_URL}/api/status`);
+        const response = await fetch(`${API_BASE_URL}/api/status`, {
+            headers: authHeaders(),
+        });
         return await handleResponse(response);
     } catch (error) {
         console.error('Error al obtener estado:', error);
@@ -107,7 +175,7 @@ export async function getProcessingStatus() {
 
 /**
  * Polling del estado del procesamiento hasta que se complete
- * 
+ *
  * @param {Function} onProgress - Callback para actualizar progreso (recibe el estado)
  * @param {Number} interval - Intervalo de polling en ms (default: 2000)
  */
@@ -120,12 +188,10 @@ export async function pollProcessingStatus(onProgress, interval = 2000, timeoutM
             try {
                 const status = await getProcessingStatus();
 
-                // Llamar callback con el estado actualizado
                 if (onProgress) {
                     onProgress(status);
                 }
 
-                // Si completó o hubo error, detener polling
                 if (status.status === 'completed') {
                     clearInterval(pollInterval);
                     resolve(status);
@@ -137,13 +203,11 @@ export async function pollProcessingStatus(onProgress, interval = 2000, timeoutM
                 } else if (status.status === 'processing') {
                     lastProcessingTime = Date.now();
                 } else if (status.status === 'idle' && (Date.now() - lastProcessingTime) > 5000) {
-                    // El backend volvió a idle inesperadamente (ej: reloader de Flask lo reinició)
                     clearInterval(pollInterval);
                     reject(new Error('El procesamiento se interrumpió inesperadamente. Intentá de nuevo.'));
                     return;
                 }
 
-                // Timeout global de seguridad
                 if (Date.now() - startTime > timeoutMs) {
                     clearInterval(pollInterval);
                     reject(new Error('Timeout: el procesamiento tardó demasiado. Intentá de nuevo.'));
@@ -161,7 +225,9 @@ export async function pollProcessingStatus(onProgress, interval = 2000, timeoutM
  */
 export async function getValidationResults() {
     try {
-        const response = await fetch(`${API_BASE_URL}/api/results/validation`);
+        const response = await fetch(`${API_BASE_URL}/api/results/validation`, {
+            headers: authHeaders(),
+        });
         return await handleResponse(response);
     } catch (error) {
         console.error('Error al obtener resultados de validación:', error);
@@ -171,12 +237,14 @@ export async function getValidationResults() {
 
 /**
  * Obtener datos de un export específico
- * 
+ *
  * @param {String} exportType - Tipo de export: 'balanceados', 'no_balanceados', 'con_cambios', 'sin_datos'
  */
 export async function getExportData(exportType) {
     try {
-        const response = await fetch(`${API_BASE_URL}/api/results/exports/${exportType}`);
+        const response = await fetch(`${API_BASE_URL}/api/results/exports/${exportType}`, {
+            headers: authHeaders(),
+        });
         return await handleResponse(response);
     } catch (error) {
         console.error(`Error al obtener export ${exportType}:`, error);
@@ -190,7 +258,9 @@ export async function getExportData(exportType) {
  */
 export async function getInstrumentDetail(instrumentId) {
     try {
-        const response = await fetch(`${API_BASE_URL}/api/instrument/${instrumentId}/detail`);
+        const response = await fetch(`${API_BASE_URL}/api/instrument/${instrumentId}/detail`, {
+            headers: authHeaders(),
+        });
         return await handleResponse(response);
     } catch (error) {
         console.error(`Error al obtener detalle del instrumento ${instrumentId}:`, error);
@@ -200,19 +270,20 @@ export async function getInstrumentDetail(instrumentId) {
 
 /**
  * Descargar un archivo CSV de export
- * 
+ *
  * @param {String} exportType - Tipo de export: 'balanceados', 'no_balanceados', 'con_cambios', 'sin_datos'
  */
 export async function downloadExport(exportType) {
     try {
-        const response = await fetch(`${API_BASE_URL}/api/download/${exportType}`);
-        
+        const response = await fetch(`${API_BASE_URL}/api/download/${exportType}`, {
+            headers: authHeaders(),
+        });
+
         if (!response.ok) {
             const data = await response.json();
             throw new Error(data.message || 'Error al descargar archivo');
         }
-        
-        // Descargar el archivo
+
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -222,7 +293,7 @@ export async function downloadExport(exportType) {
         a.click();
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
-        
+
         return { status: 'success', message: 'Archivo descargado' };
     } catch (error) {
         console.error(`Error al descargar export ${exportType}:`, error);
@@ -232,28 +303,23 @@ export async function downloadExport(exportType) {
 
 /**
  * Descargar un archivo CSV de export filtrado por IDs
- * 
- * @param {String} exportType - Tipo de export: 'balanceados', 'no_balanceados', 'con_cambios', 'sin_datos'
- * @param {Array} instrumentIds - Array de IDs de instrumentos a incluir en el export
+ *
+ * @param {String} exportType - Tipo de export
+ * @param {Array} instrumentIds - Array de IDs de instrumentos
  */
 export async function downloadFilteredExport(exportType, instrumentIds) {
     try {
         const response = await fetch(`${API_BASE_URL}/api/download-filtered/${exportType}`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                instrument_ids: instrumentIds
-            })
+            headers: authHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ instrument_ids: instrumentIds }),
         });
-        
+
         if (!response.ok) {
             const data = await response.json();
             throw new Error(data.message || 'Error al descargar archivo filtrado');
         }
-        
-        // Descargar el archivo
+
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -263,7 +329,7 @@ export async function downloadFilteredExport(exportType, instrumentIds) {
         a.click();
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
-        
+
         return { status: 'success', message: 'Archivo filtrado descargado' };
     } catch (error) {
         console.error(`Error al descargar export filtrado ${exportType}:`, error);
@@ -278,8 +344,9 @@ export async function resetProcessing() {
     try {
         const response = await fetch(`${API_BASE_URL}/api/reset`, {
             method: 'DELETE',
+            headers: authHeaders(),
         });
-        
+
         return await handleResponse(response);
     } catch (error) {
         console.error('Error al reiniciar estado:', error);
@@ -289,36 +356,33 @@ export async function resetProcessing() {
 
 /**
  * Flujo completo: subir archivos y procesar
- * 
+ *
  * @param {Object} files - Archivos a subir
  * @param {Function} onProgress - Callback para progreso
  */
 export async function uploadAndProcess(files, onProgress) {
     try {
-        // 1. Subir archivos
         if (onProgress) onProgress({ stage: 'upload', progress: 0, message: 'Subiendo archivos...' });
         const uploadResult = await uploadFiles(files);
-        
+
         if (uploadResult.status === 'error') {
             throw new Error(uploadResult.message);
         }
-        
-        // 2. Iniciar procesamiento
+
         if (onProgress) onProgress({ stage: 'process', progress: 0, message: 'Iniciando procesamiento...' });
         const processResult = await startProcessing();
-        
-        // 3. Hacer polling hasta que termine
+
         const finalStatus = await pollProcessingStatus((status) => {
             if (onProgress) {
                 onProgress({
                     stage: 'processing',
                     progress: status.progress,
                     message: status.message,
-                    status: status.status
+                    status: status.status,
                 });
             }
         });
-        
+
         return finalStatus;
     } catch (error) {
         console.error('Error en flujo completo:', error);
@@ -327,6 +391,10 @@ export async function uploadAndProcess(files, onProgress) {
 }
 
 export default {
+    login,
+    logout,
+    isAuthenticated,
+    getToken,
     checkHealth,
     uploadFiles,
     startProcessing,

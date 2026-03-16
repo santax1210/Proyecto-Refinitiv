@@ -45,7 +45,7 @@ const TEXT_ON = '#FFFFFF';      // texto activo / hover
 const HOVER_BG = 'rgba(255,255,255,0.06)';
 
 // ─── Sidebar Component ───────────────────────────────────────────────────────
-export default function Sidebar({ activePage = 'inicio', onNavigate }) {
+export default function Sidebar({ activePage = 'inicio', onNavigate, onLogout }) {
     return (
         <aside style={{
             display: 'flex', flexDirection: 'column',
@@ -114,6 +114,7 @@ export default function Sidebar({ activePage = 'inicio', onNavigate }) {
                 <div style={{ padding: '0 12px 16px' }}>
                     <button
                         id="nav-logout"
+                        onClick={() => onLogout && onLogout()}
                         style={{
                             display: 'flex', alignItems: 'center', gap: 12,
                             width: '100%', padding: '10px 16px',

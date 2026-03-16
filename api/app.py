@@ -15,19 +15,61 @@ import os
 import json
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+import jwt
+from functools import wraps
+from dotenv import load_dotenv
+
+# Cargar variables de entorno desde el archivo .env
+load_dotenv()
 
 # Crear app Flask
 app = Flask(__name__)
 
 # Configurar CORS para permitir requests desde el frontend React
-CORS(app, origins=['http://localhost:5173', 'http://localhost:5174','https://allocations-handler.finantech.cl'])
+# Permitimos localhost:5173 (Vite) y la URL de producción
+CORS(app, resources={r"/api/*": {"origins": ["http://localhost:5173", "http://127.0.0.1:5173", "https://allocations-handler.finantech.cl"]}})
 
 # Configuración
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max file size
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'raw')
 app.config['PROCESSED_FOLDER'] = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'processed')
 app.config['EXPORTS_FOLDER'] = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'exports')
+
+# ==================== AUTENTICACIÓN ====================
+
+# Credenciales y clave secreta leídas desde variables de entorno.
+# En producción, configura estas variables en AWS (Parameter Store, Secrets Manager, o .env).
+app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY')
+app.config['APP_USERNAME']   = os.environ.get('APP_USERNAME')
+app.config['APP_PASSWORD']   = os.environ.get('APP_PASSWORD')
+
+# Verificar que las variables esenciales existan
+if not all([app.config['JWT_SECRET_KEY'], app.config['APP_USERNAME'], app.config['APP_PASSWORD']]):
+    print("\n[ERROR] Faltan variables de entorno críticas (JWT_SECRET_KEY, APP_USERNAME o APP_PASSWORD).")
+    print("Asegúrate de que el archivo .env exista en la raíz del proyecto.\n")
+app.config['JWT_EXPIRES_HOURS'] = int(os.environ.get('JWT_EXPIRES_HOURS', '8'))
+
+
+def token_required(f):
+    """Decorador que valida el JWT en el header Authorization: Bearer <token>."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        auth_header = request.headers.get('Authorization', '')
+        if not auth_header.startswith('Bearer '):
+            return jsonify({'status': 'error', 'message': 'Token requerido'}), 401
+        token = auth_header.split(' ', 1)[1]
+        try:
+            jwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
+        except jwt.ExpiredSignatureError:
+            return jsonify({'status': 'error', 'message': 'Token expirado. Por favor, inicia sesión nuevamente.'}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({'status': 'error', 'message': 'Token inválido'}), 401
+        return f(*args, **kwargs)
+    return decorated
+
+
+# ==================== ESTADO DE PROCESAMIENTO ====================
 
 # Estado global del procesamiento (en producción usar Redis o DB)
 processing_state = {
@@ -86,6 +128,30 @@ def get_result_paths(clasificacion=None):
 
 # ==================== RUTAS ====================
 
+@app.route('/api/login', methods=['POST'])
+def login():
+    """Autenticar usuario y devolver JWT."""
+    data = request.get_json() or {}
+    username = data.get('username', '').strip()
+    password = data.get('password', '')
+
+    if username != app.config['APP_USERNAME'] or password != app.config['APP_PASSWORD']:
+        return jsonify({'status': 'error', 'message': 'Usuario o contraseña incorrectos'}), 401
+
+    expires_hours = app.config['JWT_EXPIRES_HOURS']
+    payload = {
+        'sub': username,
+        'iat': datetime.now(timezone.utc),
+        'exp': datetime.now(timezone.utc) + timedelta(hours=expires_hours),
+    }
+    token = jwt.encode(payload, app.config['JWT_SECRET_KEY'], algorithm='HS256')
+    return jsonify({
+        'status': 'success',
+        'token': token,
+        'expires_in': expires_hours * 3600,
+    })
+
+
 @app.route('/api/health', methods=['GET'])
 def health_check():
     """Verificar que la API está funcionando."""
@@ -96,6 +162,7 @@ def health_check():
     })
 
 @app.route('/api/upload', methods=['POST'])
+@token_required
 def upload_files():
     """
     Subir archivos CSV para procesamiento.
@@ -167,6 +234,7 @@ def upload_files():
         }), 500
 
 @app.route('/api/process', methods=['POST'])
+@token_required
 def process_pipeline():
     """
     Ejecutar el pipeline de validación en background.
@@ -378,11 +446,13 @@ def run_pipeline_background(clasificacion='moneda'):
         })
 
 @app.route('/api/status', methods=['GET'])
+@token_required
 def get_status():
     """Obtener el estado actual del procesamiento."""
     return jsonify(processing_state)
 
 @app.route('/api/results/validation', methods=['GET'])
+@token_required
 def get_validation_results():
     """
     Obtener datos de validación para la tabla.
@@ -425,6 +495,7 @@ def get_validation_results():
         }), 500
 
 @app.route('/api/results/exports/<export_type>', methods=['GET'])
+@token_required
 def get_export_data(export_type):
     """
     Obtener datos de un export específico.
@@ -463,6 +534,7 @@ def get_export_data(export_type):
         }), 500
 
 @app.route('/api/download/<export_type>', methods=['GET'])
+@token_required
 def download_export(export_type):
     """
     Descargar un archivo CSV de export.
@@ -493,6 +565,7 @@ def download_export(export_type):
         }), 500
 
 @app.route('/api/instrument/<int:instrument_id>/detail', methods=['GET'])
+@token_required
 def get_instrument_detail(instrument_id):
     """
     Obtener el detalle de composición (breakdowns) de un instrumento.
@@ -600,6 +673,7 @@ def get_instrument_detail(instrument_id):
 
 
 @app.route('/api/reset', methods=['DELETE'])
+@token_required
 def reset_data():
     """Limpiar datos temporales y reiniciar estado."""
     global processing_state
@@ -627,6 +701,7 @@ def reset_data():
         }), 500
 
 @app.route('/api/download-filtered/<export_type>', methods=['POST'])
+@token_required
 def download_filtered_export(export_type):
     """
     Descargar un archivo CSV de export filtrado por IDs de instrumentos.

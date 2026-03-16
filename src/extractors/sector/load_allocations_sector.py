@@ -2,6 +2,7 @@ import csv
 
 import pandas as pd
 
+from src.logic.sector.mapeo_sectores import MAPEO_SECTORES_INDUSTRY
 
 def _escalar_porcentajes_sector(grupo_classes):
     grupo = grupo_classes.copy()
@@ -50,6 +51,11 @@ def _cargar_archivo_nuevas_sector(nuevas_path):
 
     if 'class' in df.columns:
         df['class'] = df['class'].astype(str).str.strip()
+        df['class'] = df['class'].map(lambda x: MAPEO_SECTORES_INDUSTRY.get(x, 'Otros'))
+
+    if 'percentage' in df.columns and 'class' in df.columns:
+        cols_agrupar = [c for c in df.columns if c != 'percentage']
+        df = df.groupby(cols_agrupar, dropna=False, as_index=False)['percentage'].sum()
 
     return df
 
