@@ -2,15 +2,15 @@ import { useState, useMemo, useEffect } from 'react';
 import { downloadExport, downloadFilteredExport } from '../services/apiService';
 import { useToast } from '../context/ToastContext';
 
-// Formatea strings de pct_dominancia ("CLP 100.00%%" → "CLP 100%")
+// Formatea strings de pct_dominancia ("CLP 100.00%%" → "CLP 100%", "Technology 85.00%" → "Technology 85%")
 function formatPctDominancia(value) {
     if (!value) return '-';
-    const match = String(value).match(/([A-Z]{3,})\s*([\d\.]+)%*/);
+    const match = String(value).match(/^(.+?)\s+([\d\.]+)%*$/);
     if (!match) return value;
-    const moneda = match[1];
+    const clase = match[1];
     let pct = parseFloat(match[2]);
     pct = pct % 1 === 0 ? pct.toFixed(0) : pct.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
-    return `${moneda} ${pct}%`;
+    return `${clase} ${pct}%`;
 }
 
 // Formatea variacion (0-1) como porcentaje (ej: 0.1241 → "12.41%")
@@ -169,7 +169,7 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
             // Filtro por Tab
             let matchTab = true;
             if (activeTab === 'Balanceado') {
-                matchTab = clasificacionNueva && clasificacionNueva.toLowerCase() === 'balanceado';
+                matchTab = clasificacionNueva && clasificacionNueva.toLowerCase() === 'balanceado' && r.Cambio !== 'Sin datos';
             } else if (activeTab === 'No Balanceado') {
                 matchTab = clasificacionNueva &&
                           clasificacionNueva.toLowerCase() !== 'balanceado' &&
@@ -291,8 +291,13 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
             }
             toast({ message: `Archivo "${exportType.replace(/_/g, ' ')}" descargado correctamente`, type: 'success' });
         } catch (error) {
+            // Mostrar error detallado en toast
+            let errorMsg = error.message || 'Error desconocido al descargar export.';
+            if (error.stack) {
+                errorMsg += '\n' + error.stack.split('\n')[0];
+            }
+            toast({ message: `Error al descargar export: ${errorMsg}`, type: 'error', duration: 7000 });
             console.error('Error al descargar export:', error);
-            toast({ message: `Error al descargar: ${error.message}`, type: 'error' });
         } finally {
             setDownloading(null);
         }
@@ -477,7 +482,7 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                                     } else if (activeTab === 'Balanceado') {
                                         tabRows = SAMPLE_DATA.filter(r => {
                                             const clasificacionNueva = r.moneda_nueva ?? r.region_nueva ?? r.sector_nueva;
-                                            return clasificacionNueva && clasificacionNueva.toLowerCase() === 'balanceado';
+                                            return clasificacionNueva && clasificacionNueva.toLowerCase() === 'balanceado' && r.Cambio !== 'Sin datos';
                                         });
                                     } else if (activeTab === 'No Balanceado') {
                                         tabRows = SAMPLE_DATA.filter(r => {
@@ -545,7 +550,7 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                         } else if (tab === 'Balanceado') {
                             tabRows = SAMPLE_DATA.filter(r => {
                                 const clasificacionNueva = r.moneda_nueva ?? r.region_nueva ?? r.sector_nueva;
-                                return clasificacionNueva && clasificacionNueva.toLowerCase() === 'balanceado';
+                                return clasificacionNueva && clasificacionNueva.toLowerCase() === 'balanceado' && r.Cambio !== 'Sin datos';
                             });
                         } else if (tab === 'No Balanceado') {
                             tabRows = SAMPLE_DATA.filter(r => {

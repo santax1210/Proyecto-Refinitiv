@@ -29,7 +29,9 @@ def main():
     print(f" Fecha de ejecución: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ".center(80))
     print('=' * 80)
 
-    pos_path = 'data/raw/sector/posiciones.csv'
+    # Acepta posiciones.csv o posiciones.csv.csv (doble extensión conocida)
+    _pos_candidatos = ['data/raw/sector/posiciones.csv', 'data/raw/sector/posiciones.csv.csv']
+    pos_path = next((p for p in _pos_candidatos if os.path.exists(p)), 'data/raw/sector/posiciones.csv')
     instr_path = 'data/raw/sector/instruments.csv'
     nuevas_path = 'data/raw/sector/allocations_nuevas.csv'
     antiguas_path = 'data/raw/sector/allocations_sector.csv'

@@ -64,7 +64,7 @@ def test_pipeline_completo():
     try:
         # Ejecutar pipeline
         result = subprocess.run(
-            ['python', 'run_pipeline.py'],
+            [sys.executable, 'run_pipeline.py'],
             capture_output=True,
             text=True,
             timeout=120  # 2 minutos máximo

@@ -214,14 +214,20 @@ def calcular_variacion_no_balanceados_sector(row, df_dominancia_nuevas):
 
 
 def detectar_cambio_sector(row):
-    if 'sector_nueva' not in row or 'sector_antigua' not in row:
+    # Sin datos SOLO si el instrumento no está en df_nuevas (sector_nueva vacío)
+    if 'sector_nueva' not in row:
         return 'Sin datos'
 
     nueva = normalizar_nombre_sector(row['sector_nueva'])
-    antigua = normalizar_nombre_sector(row['sector_antigua'])
-
-    if nueva in VALORES_VACIOS or antigua in VALORES_VACIOS | {'SIN DATOS'}:
+    if nueva in VALORES_VACIOS:
         return 'Sin datos'
+
+    # sector_antigua vacío (columna 'sectores' en instruments.csv no poblada)
+    # → no es 'Sin datos', el instrumento sí existe en df_nuevas
+    antigua = normalizar_nombre_sector(row.get('sector_antigua', ''))
+    if antigua in VALORES_VACIOS | {'SIN DATOS'}:
+        return 'Sí'  # sin clasificación anterior → se considera cambio
+
     if nueva == antigua:
         return 'No'
     return 'Sí'
@@ -231,10 +237,11 @@ def calcular_estado_sector(row):
     if str(row.get('Cambio', '')).strip() == 'Sin datos':
         return ''
 
-    nueva = normalizar_nombre_sector(row.get('sector_nueva'))
-    antigua = normalizar_nombre_sector(row.get('sector_antigua'))
-    if nueva in VALORES_VACIOS or antigua in VALORES_VACIOS:
+    nueva = normalizar_nombre_sector(row.get('sector_nueva', ''))
+    if nueva in VALORES_VACIOS:
         return ''
+
+    antigua = normalizar_nombre_sector(row.get('sector_antigua', ''))
 
     if nueva == 'BALANCEADO':
         base_sector = normalizar_estado_sector(row.get('Sectores:', ''))
@@ -242,10 +249,12 @@ def calcular_estado_sector(row):
             return 'Estado_3'
         if antigua == 'BALANCEADO':
             return 'Estado_1'
-        return 'Estado_2'
+        return 'Estado_2'  # antigua vacía o sin clasificación → Sector/Vacío → Balanceado
 
     if antigua == 'BALANCEADO':
         return 'Estado_2'
+    if antigua in VALORES_VACIOS | {'SIN DATOS'}:
+        return 'Estado_3'  # sin clasificación anterior → No Balanceado → Estado_3
     if antigua == nueva:
         return 'Estado_1'
     return 'Estado_3'
