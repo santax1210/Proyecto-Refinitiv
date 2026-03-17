@@ -62,7 +62,7 @@ data/exports/
 data/backups/
 
 # Datos raw sensibles (descomentar si no quieres subirlos a Git)
-# data/raw/*.csv
+ data/raw/*.csv
 
 # Archivos temporales de depuración
 debug_*.txt
