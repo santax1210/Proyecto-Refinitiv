@@ -16,6 +16,8 @@ Flask==3.0.0
 flask-cors==4.0.0
 Werkzeug==3.0.1
 PyJWT==2.8.0
+python-dotenv>=1.0.0
+gunicorn>=21.0.0
 
 # Análisis y manipulación de datos
 pandas>=2.0.0,<3.0.0
