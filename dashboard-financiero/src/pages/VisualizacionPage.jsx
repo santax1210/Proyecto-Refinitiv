@@ -293,25 +293,27 @@ function SectionCard({ title, children }) {
    PÁGINA PRINCIPAL
 ══════════════════════════════════════════════ */
 export default function VisualizacionPage({ selectedId: propId, onSelect }) {
-    const { validationData } = useApp();
+    const { validationData, activeClasificacion } = useApp();
     const toast = useToast();
     const [selectedId, setSelectedId] = useState(propId ?? null);
     const [searchId, setSearchId] = useState('');
     const [detail, setDetail] = useState(null);
     const [loadingDetail, setLoadingDetail] = useState(false);
-    // Revisiones state (localStorage, shared with ValidacionPage)
+    // Revisiones state (localStorage, compartido con ValidacionPage, separado por clasificación)
     const [revisiones, setRevisiones] = useState(() => {
         try {
-            const saved = localStorage.getItem('allocations_revisiones');
+            const key = activeClasificacion ? `allocations_revisiones_${activeClasificacion}` : 'allocations_revisiones';
+            const saved = localStorage.getItem(key);
             return saved ? JSON.parse(saved) : {};
         } catch { return {}; }
     });
     // Persist revisiones to localStorage
     useEffect(() => {
+        const key = activeClasificacion ? `allocations_revisiones_${activeClasificacion}` : 'allocations_revisiones';
         try {
-            localStorage.setItem('allocations_revisiones', JSON.stringify(revisiones));
+            localStorage.setItem(key, JSON.stringify(revisiones));
         } catch {}
-    }, [revisiones]);
+    }, [revisiones, activeClasificacion]);
 
 
     // Sincronizar con selección externa (desde la tabla)
@@ -322,16 +324,16 @@ export default function VisualizacionPage({ selectedId: propId, onSelect }) {
         }
     }, [propId]);
 
-    // Obtener breakdown al cambiar instrumento
+    // Obtener breakdown al cambiar instrumento o clasificación activa
     useEffect(() => {
         if (selectedId == null) return;
         setDetail(null);
         setLoadingDetail(true);
-        getInstrumentDetail(selectedId)
+        getInstrumentDetail(selectedId, activeClasificacion || null)
             .then(data => setDetail(data))
             .catch(() => setDetail(null))
             .finally(() => setLoadingDetail(false));
-    }, [selectedId]);
+    }, [selectedId, activeClasificacion]);
 
     const handleSearch = (val) => {
         setSearchId(val);
