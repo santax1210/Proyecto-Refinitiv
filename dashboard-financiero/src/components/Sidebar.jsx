@@ -1,4 +1,6 @@
 
+import { useApp } from '../context/AppContext';
+
 // ─── Inline SVG Icons ───────────────────────────────────────────────────────
 const icons = {
     inicio: (
@@ -44,8 +46,12 @@ const TEXT_DIM = '#8A8F98';      // texto inactivo
 const TEXT_ON = '#FFFFFF';      // texto activo / hover
 const HOVER_BG = 'rgba(255,255,255,0.06)';
 
+const CLASIF_LABELS = { moneda: 'Moneda', region: 'Región', sector: 'Industria' };
+
 // ─── Sidebar Component ───────────────────────────────────────────────────────
 export default function Sidebar({ activePage = 'inicio', onNavigate, onLogout }) {
+    const { activeClasificacion } = useApp();
+    const clasifLabel = CLASIF_LABELS[activeClasificacion] || null;
     return (
         <aside style={{
             display: 'flex', flexDirection: 'column',
@@ -55,10 +61,38 @@ export default function Sidebar({ activePage = 'inicio', onNavigate, onLogout })
             userSelect: 'none',
         }}>
             {/* ── Logo ── */}
-            <div style={{ padding: '28px 24px 24px' }}>
+            <div style={{ padding: '28px 24px 20px' }}>
                 <span style={{ fontSize: 17, letterSpacing: '-0.3px', color: TEXT_ON, fontWeight: 800 }}>
                     Refinitiv <span style={{ color: TEAL }}>Automation</span>
                 </span>
+                {/* Clasificación activa */}
+                <div style={{ marginTop: 10, minHeight: 22 }}>
+                    {clasifLabel ? (
+                        <div style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 6,
+                            padding: '3px 9px', borderRadius: 20,
+                            backgroundColor: 'rgba(41,157,145,0.15)',
+                            border: '1px solid rgba(41,157,145,0.30)',
+                        }}>
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: TEAL, flexShrink: 0 }} />
+                            <span style={{ fontSize: 11, fontWeight: 700, color: TEAL, letterSpacing: '0.04em' }}>
+                                {clasifLabel}
+                            </span>
+                        </div>
+                    ) : (
+                        <div style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 6,
+                            padding: '3px 9px', borderRadius: 20,
+                            backgroundColor: 'rgba(255,255,255,0.05)',
+                            border: '1px solid rgba(255,255,255,0.08)',
+                        }}>
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: TEXT_DIM, flexShrink: 0 }} />
+                            <span style={{ fontSize: 11, fontWeight: 500, color: TEXT_DIM, letterSpacing: '0.04em' }}>
+                                Sin clasificación
+                            </span>
+                        </div>
+                    )}
+                </div>
             </div>
 
             {/* ── Navigation ── */}

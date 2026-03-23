@@ -1,6 +1,17 @@
 import { createContext, useContext, useState, useCallback } from 'react';
 import * as api from '../services/apiService';
 
+// Normaliza el valor de clasificación al key interno usado para almacenamiento
+// Debe coincidir con la lógica del backend (normalize_clasificacion)
+export function normalizeClasifKey(c) {
+    const v = String(c || 'moneda').toLowerCase().trim();
+    if (v.includes('regi')) return 'region';
+    if (v.includes('indus') || v.includes('sector')) return 'sector';
+    return 'moneda';
+}
+
+const EMPTY_MAP = { moneda: null, region: null, sector: null };
+
 /**
  * Contexto global de la aplicación para manejar:
  * - Estado de archivos subidos
@@ -19,9 +30,23 @@ export function AppProvider({ children }) {
         message: '',
         error: null,
     });
-    const [validationData, setValidationData] = useState(null);
-    const [summary, setSummary] = useState(null);
+    // Estado de datos por clasificación (moneda / region / sector)
+    const [validationDataMap, setValidationDataMap] = useState({ ...EMPTY_MAP });
+    const [summaryMap, setSummaryMap] = useState({ ...EMPTY_MAP });
     const [clasificacion, setClasificacion] = useState('');
+    // Clasificación actualmente visualizada en ValidacionPage
+    const [activeClasificacion, _setActiveClasificacion] = useState(() => {
+        try { return localStorage.getItem('allocations_active_clasif') || ''; } catch { return ''; }
+    });
+
+    const setActiveClasificacion = useCallback((key) => {
+        _setActiveClasificacion(key);
+        try { localStorage.setItem('allocations_active_clasif', key); } catch { /* ignorar */ }
+    }, []);
+
+    // Valores computados para la clasificación activa
+    const validationData = validationDataMap[activeClasificacion] ?? null;
+    const summary = summaryMap[activeClasificacion] ?? null;
 
     /**
      * Subir archivos y ejecutar pipeline completo
@@ -32,8 +57,11 @@ export function AppProvider({ children }) {
             const clasif = clasificacion || files.clasificacion || 'moneda';
             const { clasificacion: _omit, ...fileMap } = files;
 
-            // Limpiar revisiones guardadas del procesamiento anterior
-            try { localStorage.removeItem('allocations_revisiones'); } catch { /* ignorar */ }
+            const clasifKey = normalizeClasifKey(clasif);
+
+            // Limpiar solo los datos de ESTA clasificación
+            try { localStorage.removeItem(`allocations_revisiones_${clasifKey}`); } catch { /* ignorar */ }
+            try { localStorage.removeItem(`allocations_filtros_${clasifKey}`); } catch { /* ignorar */ }
 
             // Actualizar estado a uploading
             setProcessingState({
@@ -45,7 +73,7 @@ export function AppProvider({ children }) {
 
             // Subir archivos
             const uploadResult = await api.uploadFiles(fileMap, clasif);
-            
+
             if (uploadResult.status === 'error') {
                 throw new Error(uploadResult.message);
             }
@@ -72,10 +100,11 @@ export function AppProvider({ children }) {
                 });
             });
 
-            // Cargar resultados
-            const results = await api.getValidationResults();
-            setValidationData(results.data);
-            setSummary(results.summary);
+            // Cargar resultados y guardar bajo la clasificación correcta
+            const results = await api.getValidationResults(clasifKey);
+            setValidationDataMap(prev => ({ ...prev, [clasifKey]: results.data }));
+            setSummaryMap(prev => ({ ...prev, [clasifKey]: results.summary }));
+            setActiveClasificacion(clasifKey);
 
             // Completado
             setProcessingState({
@@ -101,13 +130,24 @@ export function AppProvider({ children }) {
     }, [clasificacion]);
 
     /**
-     * Cargar resultados de validación (si ya fueron procesados)
+     * Cargar resultados de validación para una clasificación específica (o la última procesada).
+     * @param {string|null} clasifKey - 'moneda', 'region', 'sector'. null = usa la última procesada por el backend.
      */
-    const loadValidationResults = useCallback(async () => {
+    const loadValidationResults = useCallback(async (clasifKey) => {
         try {
-            const results = await api.getValidationResults();
-            setValidationData(results.data);
-            setSummary(results.summary);
+            const results = await api.getValidationResults(clasifKey || null);
+            // Guardamos bajo la clasificación que viene en el summary del backend
+            const storeKey = results.summary?.clasificacion || clasifKey || 'moneda';
+            setValidationDataMap(prev => ({ ...prev, [storeKey]: results.data }));
+            setSummaryMap(prev => ({ ...prev, [storeKey]: results.summary }));
+            // Si aún no hay clasificación activa, establecer la que se acaba de cargar
+            _setActiveClasificacion(prev => {
+                if (!prev) {
+                    try { localStorage.setItem('allocations_active_clasif', storeKey); } catch { /* ignorar */ }
+                    return storeKey;
+                }
+                return prev;
+            });
             return results;
         } catch (error) {
             console.error('Error al cargar resultados:', error);
@@ -128,8 +168,10 @@ export function AppProvider({ children }) {
                 message: '',
                 error: null,
             });
-            setValidationData(null);
-            setSummary(null);
+            setValidationDataMap({ ...EMPTY_MAP });
+            setSummaryMap({ ...EMPTY_MAP });
+            _setActiveClasificacion('');
+            try { localStorage.removeItem('allocations_active_clasif'); } catch { /* ignorar */ }
         } catch (error) {
             console.error('Error al reiniciar:', error);
             throw error;
@@ -152,8 +194,12 @@ export function AppProvider({ children }) {
         // Estado
         uploadedFiles,
         processingState,
-        validationData,
-        summary,
+        // Datos por clasificación
+        validationDataMap,          // { moneda, region, sector } — para el selector de clasificación
+        validationData,             // acceso directo a la clasificación activa
+        summary,                    // acceso directo a la clasificación activa
+        activeClasificacion,
+        setActiveClasificacion,
         clasificacion,
         setClasificacion,
         // Acciones
@@ -164,8 +210,6 @@ export function AppProvider({ children }) {
         // Setters directos (para casos especiales)
         setUploadedFiles,
         setProcessingState,
-        setValidationData,
-        setSummary,
     };
 
     return (

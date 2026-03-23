@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
 
@@ -83,9 +84,11 @@ function FileSlot({ slotKey, label, desc, file, onFile, onClear }) {
 }
 
 
+
 export default function InicioPage() {
     const { clasificacion, setClasificacion, uploadAndProcess, processingState } = useApp();
     const toast = useToast();
+    const navigate = useNavigate();
     const [slots, setSlots] = useState({});
     const [processing, setProcessing] = useState(false);
     const [error, setError] = useState(null);
@@ -110,7 +113,10 @@ export default function InicioPage() {
         setError(null);
         try {
             await uploadAndProcess({ ...slots });
-            toast({ message: 'Pipeline completado. Revisá los resultados en Validación.', type: 'success', duration: 5000 });
+            toast({ message: 'Pipeline completado. Revisá los resultados en Validación.', type: 'success', duration: 2500 });
+            setTimeout(() => {
+                navigate('/validacion');
+            }, 2500);
         } catch (err) {
             const msg = err.message || 'Error al procesar archivos';
             setError(msg);

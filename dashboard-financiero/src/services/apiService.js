@@ -222,10 +222,14 @@ export async function pollProcessingStatus(onProgress, interval = 2000, timeoutM
 
 /**
  * Obtener resultados de validación para la tabla
+ * @param {string|null} clasificacion - 'moneda', 'region', o 'sector'. Si es null, usa la última procesada.
  */
-export async function getValidationResults() {
+export async function getValidationResults(clasificacion = null) {
     try {
-        const response = await fetch(`${API_BASE_URL}/api/results/validation`, {
+        const url = clasificacion
+            ? `${API_BASE_URL}/api/results/validation?clasificacion=${encodeURIComponent(clasificacion)}`
+            : `${API_BASE_URL}/api/results/validation`;
+        const response = await fetch(url, {
             headers: authHeaders(),
         });
         return await handleResponse(response);
@@ -255,10 +259,14 @@ export async function getExportData(exportType) {
 /**
  * Obtener el detalle de composición de un instrumento (breakdowns antigua y nueva)
  * @param {Number} instrumentId - ID del instrumento
+ * @param {string|null} clasificacion - 'moneda', 'region', 'sector'. null = usa la última procesada.
  */
-export async function getInstrumentDetail(instrumentId) {
+export async function getInstrumentDetail(instrumentId, clasificacion = null) {
     try {
-        const response = await fetch(`${API_BASE_URL}/api/instrument/${instrumentId}/detail`, {
+        const url = clasificacion
+            ? `${API_BASE_URL}/api/instrument/${instrumentId}/detail?clasificacion=${encodeURIComponent(clasificacion)}`
+            : `${API_BASE_URL}/api/instrument/${instrumentId}/detail`;
+        const response = await fetch(url, {
             headers: authHeaders(),
         });
         return await handleResponse(response);

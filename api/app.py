@@ -458,9 +458,11 @@ def get_validation_results():
     Obtener datos de validación para la tabla.
     
     Retorna el df_final procesado con columnas mapeadas para el frontend.
+    Acepta ?clasificacion=moneda|region|sector para cargar datos de una clasificación específica.
     """
     try:
-        proc_folder, _, df_final_name = get_result_paths()
+        clasif_param = request.args.get('clasificacion', None)
+        proc_folder, _, df_final_name = get_result_paths(clasif_param)
         df_final_path = os.path.join(proc_folder, df_final_name)
         
         if not os.path.exists(df_final_path):
@@ -570,11 +572,15 @@ def get_instrument_detail(instrument_id):
     """
     Obtener el detalle de composición (breakdowns) de un instrumento.
     Retorna las top-N clases (monedas o regiones) antiguas y nuevas.
+    Acepta ?clasificacion=moneda|region|sector para seleccionar la clasificación.
     """
     try:
         import pandas as pd
 
-        clasificacion = normalize_clasificacion(processing_state.get('clasificacion', 'moneda'))
+        clasif_param = request.args.get('clasificacion', None)
+        clasificacion = normalize_clasificacion(
+            clasif_param if clasif_param else processing_state.get('clasificacion', 'moneda')
+        )
         proc_folder, _, _ = get_result_paths(clasificacion)
 
         TOP_N = 4  # Top 4 + "Otros"

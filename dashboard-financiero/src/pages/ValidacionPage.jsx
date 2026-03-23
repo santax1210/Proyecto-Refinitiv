@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useRef, useState, useMemo, useEffect } from 'react';
 import { downloadExport, downloadFilteredExport } from '../services/apiService';
 import { useToast } from '../context/ToastContext';
 
@@ -77,86 +77,88 @@ const borderTop = { borderTop: '1px solid #F0F0F0' };
 
 
 export default function ValidacionPage({ onNavigate, onSelect }) {
-    const { validationData, loadValidationResults, summary } = useApp();
+    const { validationData, loadValidationResults, summary, activeClasificacion, setActiveClasificacion, validationDataMap } = useApp();
     const toast = useToast();
 
-    // --- Restaurar filtros desde localStorage si existen ---
-    const getInitialFilters = () => {
-        try {
-            const saved = localStorage.getItem('allocations_filtros');
-            if (saved) {
-                const obj = JSON.parse(saved);
-                return {
-                    activeTab: obj.activeTab ?? 'Todos',
-                    search: obj.search ?? '',
-                    filterEstadoIdx: obj.filterEstadoIdx ?? null,
-                    filterVariacion: obj.filterVariacion ?? null,
-                    filterRevision: obj.filterRevision ?? null,
-                    page: obj.page ?? 1,
-                };
-            }
-        } catch {}
-        return {
-            activeTab: 'Todos',
-            search: '',
-            filterEstadoIdx: null,
-            filterVariacion: null,
-            filterRevision: null,
-            page: 1,
-        };
-    };
-    const initialFilters = getInitialFilters();
-
-    const [activeTab, setActiveTab] = useState(initialFilters.activeTab);
-    const [search, setSearch] = useState(initialFilters.search);
+    const [activeTab, setActiveTab] = useState('Todos');
+    const [search, setSearch] = useState('');
     const [selected, setSelected] = useState([]);
-    const [page, setPage] = useState(initialFilters.page);
+    const [page, setPage] = useState(1);
     const [showFilterMenu, setShowFilterMenu] = useState(false);
-    const [filterEstadoIdx, setFilterEstadoIdx] = useState(initialFilters.filterEstadoIdx);
-    const [filterVariacion, setFilterVariacion] = useState(initialFilters.filterVariacion); // null, 'Baja', 'Alta'
-    const [filterRevision, setFilterRevision] = useState(initialFilters.filterRevision); // null, 'Validado', 'Rechazado', 'Sin revisar'
-    const [revisiones, setRevisiones] = useState(() => {
-        try {
-            const saved = localStorage.getItem('allocations_revisiones');
-            return saved ? JSON.parse(saved) : {};
-        } catch { return {}; }
-    }); // { [ID]: 'Validado' | 'Rechazado' }
+    const [filterEstadoIdx, setFilterEstadoIdx] = useState(null);
+    const [filterVariacion, setFilterVariacion] = useState(null); // null, 'Baja', 'Alta'
+    const [filterRevision, setFilterRevision] = useState(null); // null, 'Validado', 'Rechazado', 'Sin revisar'
+    const [revisiones, setRevisiones] = useState({}); // { [ID]: 'Validado' | 'Rechazado' }
     const [loading, setLoading] = useState(false);
     const [downloading, setDownloading] = useState(null); // 'balanceados', 'no_balanceados', 'sin_datos', null
     const [showGlosario, setShowGlosario] = useState(false);
     const rowsPerPage = 15;
 
+    // Ref siempre actualizado con la clasificación activa — evita que los efectos de
+    // persistencia escriban en la clave equivocada al cambiar de clasificación.
+    const activeClasifRef = useRef(activeClasificacion);
 
-    // Persistir revisiones en localStorage cada vez que cambian
+    // Restaurar filtros y revisiones cuando cambia la clasificación activa
     useEffect(() => {
+        activeClasifRef.current = activeClasificacion;
+        if (!activeClasificacion) return;
+
         try {
-            localStorage.setItem('allocations_revisiones', JSON.stringify(revisiones));
+            const saved = localStorage.getItem(`allocations_filtros_${activeClasificacion}`);
+            if (saved) {
+                const obj = JSON.parse(saved);
+                setActiveTab(obj.activeTab ?? 'Todos');
+                setSearch(obj.search ?? '');
+                setFilterEstadoIdx(obj.filterEstadoIdx ?? null);
+                setFilterVariacion(obj.filterVariacion ?? null);
+                setFilterRevision(obj.filterRevision ?? null);
+                setPage(obj.page ?? 1);
+            } else {
+                setActiveTab('Todos'); setSearch('');
+                setFilterEstadoIdx(null); setFilterVariacion(null);
+                setFilterRevision(null); setPage(1);
+            }
+        } catch { /* ignorar */ }
+
+        try {
+            const savedRev = localStorage.getItem(`allocations_revisiones_${activeClasificacion}`);
+            setRevisiones(savedRev ? JSON.parse(savedRev) : {});
+        } catch { setRevisiones({}); }
+    }, [activeClasificacion]);
+
+    // Persistir revisiones cuando cambian (usa ref para clave correcta)
+    useEffect(() => {
+        if (!activeClasifRef.current) return;
+        try {
+            localStorage.setItem(`allocations_revisiones_${activeClasifRef.current}`, JSON.stringify(revisiones));
         } catch { /* cuota excedida u otro error, ignorar */ }
     }, [revisiones]);
 
-    // Persistir filtros en localStorage cada vez que cambian
+    // Persistir filtros cuando cambian (usa ref para clave correcta)
     useEffect(() => {
+        if (!activeClasifRef.current) return;
         try {
-            localStorage.setItem('allocations_filtros', JSON.stringify({
-                activeTab,
-                search,
-                filterEstadoIdx,
-                filterVariacion,
-                filterRevision,
-                page,
+            localStorage.setItem(`allocations_filtros_${activeClasifRef.current}`, JSON.stringify({
+                activeTab, search, filterEstadoIdx, filterVariacion, filterRevision, page,
             }));
         } catch { /* cuota excedida u otro error, ignorar */ }
     }, [activeTab, search, filterEstadoIdx, filterVariacion, filterRevision, page]);
 
-    // Cargar datos al montar el componente si no están disponibles
+    // Cargar datos al montar y cuando cambia la clasificación activa (si no hay datos en memoria)
     useEffect(() => {
-        if (!validationData) {
+        if (!validationData && activeClasificacion) {
             setLoading(true);
-            loadValidationResults()
+            loadValidationResults(activeClasificacion)
+                .catch(err => console.error('Error al cargar datos:', err))
+                .finally(() => setLoading(false));
+        } else if (!validationData && !activeClasificacion) {
+            // Sin clasificación activa: intentar cargar la última procesada por el backend
+            setLoading(true);
+            loadValidationResults(null)
                 .catch(err => console.error('Error al cargar datos:', err))
                 .finally(() => setLoading(false));
         }
-    }, [validationData, loadValidationResults]);
+    }, [validationData, loadValidationResults, activeClasificacion]);
 
     // Usar los datos reales o array vacío si no hay datos
     const SAMPLE_DATA = validationData || [];
@@ -389,6 +391,50 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                     </div>
                 </div>
             )}
+
+            {/* ── Selector de clasificación ── */}
+            {(() => {
+                const OPCIONES = [
+                    { key: 'moneda',  label: 'Moneda' },
+                    { key: 'region',  label: 'Región' },
+                    { key: 'sector',  label: 'Industria' },
+                ];
+                return (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#9F9F9F', textTransform: 'uppercase', letterSpacing: '0.09em', flexShrink: 0 }}>
+                            Vista:
+                        </span>
+                        {OPCIONES.map(({ key, label }) => {
+                            const isActive = activeClasificacion === key;
+                            const hasData = !!validationDataMap[key];
+                            return (
+                                <button
+                                    key={key}
+                                    onClick={() => { if (hasData || isActive) setActiveClasificacion(key); }}
+                                    title={!hasData && !isActive ? `No hay datos procesados para ${label}` : label}
+                                    style={{
+                                        display: 'inline-flex', alignItems: 'center', gap: 6,
+                                        padding: '5px 13px', borderRadius: 20,
+                                        border: `1.5px solid ${isActive ? '#299D91' : hasData ? '#DDE3E6' : '#E8ECEF'}`,
+                                        backgroundColor: isActive ? '#EBF7F6' : hasData ? '#FFFFFF' : '#F5F6F8',
+                                        color: isActive ? '#299D91' : hasData ? '#525256' : '#C0C4CA',
+                                        fontSize: 12, fontWeight: isActive ? 700 : 500,
+                                        cursor: hasData && !isActive ? 'pointer' : isActive ? 'default' : 'not-allowed',
+                                        transition: 'all 0.15s',
+                                    }}
+                                    onMouseEnter={e => { if (hasData && !isActive) { e.currentTarget.style.borderColor = '#299D91'; e.currentTarget.style.color = '#299D91'; } }}
+                                    onMouseLeave={e => { if (hasData && !isActive) { e.currentTarget.style.borderColor = '#DDE3E6'; e.currentTarget.style.color = '#525256'; } }}
+                                >
+                                    {hasData && (
+                                        <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: isActive ? '#299D91' : '#9F9F9F', flexShrink: 0 }} />
+                                    )}
+                                    {label}
+                                </button>
+                            );
+                        })}
+                    </div>
+                );
+            })()}
 
             {/* ── Skeleton de carga ── */}
             {loading && (
