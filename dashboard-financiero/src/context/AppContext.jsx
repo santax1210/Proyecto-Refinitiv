@@ -32,8 +32,13 @@ export function AppProvider({ children }) {
             const clasif = clasificacion || files.clasificacion || 'moneda';
             const { clasificacion: _omit, ...fileMap } = files;
 
-            // Limpiar revisiones guardadas del procesamiento anterior
-            try { localStorage.removeItem('allocations_revisiones'); } catch { /* ignorar */ }
+            // Limpiar revisiones y filtros guardados del procesamiento anterior
+            try { 
+                localStorage.removeItem('allocations_revisiones');
+            } catch { /* ignorar */ }
+            try {
+                localStorage.removeItem('allocations_filtros');
+            } catch { /* ignorar */ }
 
             // Actualizar estado a uploading
             setProcessingState({
@@ -45,7 +50,7 @@ export function AppProvider({ children }) {
 
             // Subir archivos
             const uploadResult = await api.uploadFiles(fileMap, clasif);
-            
+
             if (uploadResult.status === 'error') {
                 throw new Error(uploadResult.message);
             }
