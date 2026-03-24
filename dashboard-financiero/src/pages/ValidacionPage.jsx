@@ -43,6 +43,9 @@ const WORKFLOW_STEPS = [
     { paso: 1, sub: 2, tab: 'No Balanceado', estadoIdx: 1, variacion: 'Baja',
       label: 'No Balanceados · Estado 1 · Baja variación',
       desc: 'Instrumentos no balanceados, sin cambio de clasificación y con baja variación. Validación directa y segura.' },
+    { paso: 1, sub: 3, tab: 'Balanceado',    estadoIdx: 3, variacion: null,
+      label: 'Balanceados · Estado 3',
+      desc: 'Instrumentos balanceados con cambios significativos de clasificación. Revisar con atención antes de validar.' },
     // Paso 2 · Con cambios · Baja variación
     { paso: 2, sub: 1, tab: 'Balanceado',    estadoIdx: 2, variacion: 'Baja',
       label: 'Balanceados · Estado 2 · Baja variación',
@@ -64,13 +67,14 @@ const WORKFLOW_STEPS = [
     { paso: 4, sub: 2, tab: 'No Balanceado', estadoIdx: 2, variacion: 'Alta',
       label: 'No Balanceados · Estado 2 · Alta variación',
       desc: 'Instrumentos no balanceados con cambio y alta variación. Mayor complejidad, revisar cada caso individualmente.' },
-    // Paso 5 · Estado 3 · Los casos más críticos
-    { paso: 5, sub: 1, tab: 'Balanceado',    estadoIdx: 3, variacion: null,
-      label: 'Balanceados · Estado 3',
-      desc: 'Casos con cambios significativos en balanceados. Requieren revisión exhaustiva.' },
-    { paso: 5, sub: 2, tab: 'No Balanceado', estadoIdx: 3, variacion: null,
-      label: 'No Balanceados · Estado 3',
-      desc: 'Los casos más complejos: cambios críticos en instrumentos no balanceados. Revisar cada instrumento individualmente.' },
+        // Paso 5 · Estado 3 · El caso más crítico
+        { paso: 5, sub: 1, tab: 'No Balanceado', estadoIdx: 3, variacion: null,
+            label: 'No Balanceados · Estado 3',
+            desc: 'Los casos más complejos: cambios críticos en instrumentos no balanceados. Revisar cada instrumento individualmente.' },
+        // Paso 5 · Subpaso hedged: instrumentos con patrón "hedged" en el nombre
+        { paso: 5, sub: 2, tab: 'Todos', estadoIdx: null, variacion: null, hedged: true,
+            label: 'Hedged',
+            desc: 'Instrumentos con etiquetas de hedge en el nombre (HEDGE, HEDGED, HDG, etc.). Agrupar para revisión específica.' },
 ];
 
 const PASO_META = [
@@ -80,6 +84,15 @@ const PASO_META = [
     { num: 4, title: 'Con cambios',    subtitle: 'Alta variación',    color: '#F97316', bg: '#FFF7ED' },
     { num: 5, title: 'Estado crítico', subtitle: 'Rev. exhaustiva',   color: '#D94A38', bg: '#FFF0EE' },
 ];
+
+// Patrones para detectar instrumentos hedged en el nombre
+const HEDGED_PATTERNS = ['HEDGE', 'HEDGED', '(HEDGED)', 'UNHEDGED', 'HED', 'HDG', '(HDG)'];
+
+function isInstrumentHedged(nombre) {
+    if (!nombre) return false;
+    const up = String(nombre).toUpperCase();
+    return HEDGED_PATTERNS.some(pat => up.includes(pat));
+}
 
 const ESTADO_CFG = {
     'Balanceado': { dot: '#299D91', bg: '#EBF7F6', text: '#299D91' },
@@ -129,7 +142,13 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
 
     const [activeTab, setActiveTab] = useState('Todos');
     const [search, setSearch] = useState('');
-    const [selected, setSelected] = useState([]);
+    const [selected, setSelected] = useState(() => {
+        if (!activeClasificacion) return [];
+        try {
+            const saved = localStorage.getItem(`allocations_selected_${activeClasificacion}`);
+            return saved ? JSON.parse(saved) : [];
+        } catch { return []; }
+    });
     const [page, setPage] = useState(1);
     const [showFilterMenu, setShowFilterMenu] = useState(false);
     const [filterEstadoIdx, setFilterEstadoIdx] = useState(null);
@@ -139,9 +158,22 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
     const [loading, setLoading] = useState(false);
     const [downloading, setDownloading] = useState(null); // 'balanceados', 'no_balanceados', 'sin_datos', null
     const [showGlosario, setShowGlosario] = useState(false);
-    // Workflow guiado
-    const [workflowMode, setWorkflowMode] = useState(true);        // true = guiado, false = libre
-    const [workflowSubStepIdx, setWorkflowSubStepIdx] = useState(0); // 0-9
+    // Workflow guiado — inicializados directamente desde localStorage (evita race condition de efectos)
+    const [workflowMode, setWorkflowMode] = useState(() => {
+        if (!activeClasificacion) return true;
+        try {
+            const v = localStorage.getItem(`allocations_wf_mode_${activeClasificacion}`);
+            return v !== 'false';
+        } catch { return true; }
+    });
+    const [workflowSubStepIdx, setWorkflowSubStepIdx] = useState(() => {
+        if (!activeClasificacion) return 0;
+        try {
+            const v = localStorage.getItem(`allocations_wf_step_${activeClasificacion}`);
+            const idx = v !== null ? parseInt(v, 10) : 0;
+            return !isNaN(idx) ? Math.max(0, Math.min(idx, WORKFLOW_STEPS.length - 1)) : 0;
+        } catch { return 0; }
+    });
     // completedPasos viene del contexto global — persiste al navegar entre páginas
     const completedPasos = useMemo(
         () => new Set(completedPasosMap[activeClasificacion] || []),
@@ -180,6 +212,12 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
             setRevisiones(savedRev ? JSON.parse(savedRev) : {});
         } catch { setRevisiones({}); }
 
+        // Restaurar selección
+        try {
+            const savedSel = localStorage.getItem(`allocations_selected_${activeClasificacion}`);
+            setSelected(savedSel ? JSON.parse(savedSel) : []);
+        } catch { setSelected([]); }
+
         // Restaurar estado del workflow
         try {
             const wfMode = localStorage.getItem(`allocations_wf_mode_${activeClasificacion}`);
@@ -210,6 +248,14 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
             }));
         } catch { /* cuota excedida u otro error, ignorar */ }
     }, [activeTab, search, filterEstadoIdx, filterVariacion, filterRevision, page]);
+
+    // Persistir selección cuando cambia
+    useEffect(() => {
+        if (!activeClasifRef.current) return;
+        try {
+            localStorage.setItem(`allocations_selected_${activeClasifRef.current}`, JSON.stringify(selected));
+        } catch { /* ignorar */ }
+    }, [selected]);
 
     // Persistir estado del workflow (modo y sub-paso)
     useEffect(() => {
@@ -249,6 +295,10 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
     const wfStepCounts = useMemo(() => {
         const step = _wfStep;
         const rows = SAMPLE_DATA.filter(r => {
+            // Soporte para subpaso especial 'hedged'
+            if (step.hedged) {
+                return isInstrumentHedged(r.Nombre);
+            }
             const cn = r.moneda_nueva ?? r.region_nueva ?? r.sector_nueva;
             let mt = false;
             if (step.tab === 'Balanceado')    mt = cn && cn.toLowerCase() === 'balanceado' && r.Cambio !== 'Sin datos';
@@ -298,6 +348,11 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
         SAMPLE_DATA.filter(r => {
             const clasificacionNueva = r.moneda_nueva ?? r.region_nueva ?? r.sector_nueva;
             const clasificacionAntigua = r.moneda_antigua ?? r.region_antigua ?? r.sector_antigua;
+
+            // Si el paso actual es un subpaso 'hedged', filtrar por nombre y omitir otros criterios
+            if (workflowMode && _wfStep && _wfStep.hedged) {
+                return isInstrumentHedged(r.Nombre);
+            }
 
             // Filtro por Tab (efectivo según modo)
             let matchTab = true;
@@ -865,7 +920,8 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                     const pct     = total > 0 ? Math.round((revisados / total) * 100) : 0;
                     const allDone = total > 0 && revisados === total;
                     const isLast  = workflowSubStepIdx === WORKFLOW_STEPS.length - 1;
-                    const isLastSubInPaso = step.sub === 2; // sub-paso 2 es el último de cada paso
+                    const subTotalInPaso = WORKFLOW_STEPS.filter(s => s.paso === step.paso).length;
+                    const isLastSubInPaso = step.sub === subTotalInPaso;
 
                     return (
                         <div style={{
@@ -888,11 +944,11 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                                             backgroundColor: allDone ? '#299D91' : meta.color,
                                             color: '#FFFFFF',
                                         }}>
-                                            Paso {step.paso} · {step.sub}/2
+                                            Paso {step.paso} · {step.sub}/{subTotalInPaso}
                                         </span>
                                         {/* Dots sub-paso */}
                                         <div style={{ display: 'flex', gap: 4 }}>
-                                            {[1, 2].map(s => (
+                                            {Array.from({ length: subTotalInPaso }, (_, i) => i + 1).map(s => (
                                                 <span key={s} style={{
                                                     width: 7, height: 7, borderRadius: '50%',
                                                     backgroundColor: s === step.sub ? (allDone ? '#299D91' : meta.color) : '#DDE3E6',
