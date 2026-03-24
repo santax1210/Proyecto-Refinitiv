@@ -13,6 +13,13 @@ function formatPctDominancia(value) {
     return `${clase} ${pct}%`;
 }
 
+// Extrae solo la clase/moneda/región de un string tipo "CLP 100.00%" → "CLP"
+function extractClaseFromPct(value) {
+    if (!value || typeof value !== 'string' || value.trim() === '' || value === 'Sin datos') return null;
+    const match = value.match(/^(.+?)\s+[\d\.]+%*$/);
+    return match ? match[1].trim() : null;
+}
+
 // Formatea variacion (0-1) como porcentaje (ej: 0.1241 → "12.41%")
 function formatVariacion(value) {
     if (value == null) return '-';
@@ -151,6 +158,13 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
     });
     const [page, setPage] = useState(1);
     const [showFilterMenu, setShowFilterMenu] = useState(false);
+    // Filtros por columna PCT
+    const [showPctAntiguoMenu, setShowPctAntiguoMenu] = useState(false);
+    const [showPctNuevoMenu, setShowPctNuevoMenu] = useState(false);
+    const [pctAntiguoFilter, setPctAntiguoFilter] = useState(null); // e.g. 'USD'
+    const [pctNuevoFilter, setPctNuevoFilter] = useState(null);
+    // Orden en columna Variación: null | 'asc' | 'desc'
+    const [variacionSort, setVariacionSort] = useState(null);
     const [filterEstadoIdx, setFilterEstadoIdx] = useState(null);
     const [filterVariacion, setFilterVariacion] = useState(null); // null, 'Baja', 'Alta'
     const [filterRevision, setFilterRevision] = useState(null); // null, 'Validado', 'Rechazado', 'Sin revisar'
@@ -248,6 +262,17 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
             }));
         } catch { /* cuota excedida u otro error, ignorar */ }
     }, [activeTab, search, filterEstadoIdx, filterVariacion, filterRevision, page]);
+
+    // Cerrar menús PCT al hacer click fuera
+    useEffect(() => {
+        if (!showPctAntiguoMenu && !showPctNuevoMenu) return;
+        const handler = () => {
+            setShowPctAntiguoMenu(false);
+            setShowPctNuevoMenu(false);
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [showPctAntiguoMenu, showPctNuevoMenu]);
 
     // Persistir selección cuando cambia
     useEffect(() => {
@@ -388,15 +413,56 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                 (r.ID && r.ID.toString().toLowerCase().includes(search.toLowerCase())) ||
                 (clasificacionAntigua && clasificacionAntigua.toLowerCase().includes(search.toLowerCase()));
 
-            return matchTab && matchEstadoIdx && matchVariacion && matchRevision && matchSearch;
-        }), [effTab, effEstadoIdx, effVariacion, filterRevision, revisiones, search, SAMPLE_DATA]); // eslint-disable-line
+            // Filtro por columna PCT Antiguo/Nuevo: extrae la clase del string "CLP 100%" → "CLP"
+            const claseAntigua = extractClaseFromPct(r.pct_dominancia_antigua);
+            const claseNueva   = extractClaseFromPct(r.pct_dominancia_nuevo ?? r.pct_dominancia_nueva);
+            const matchPctAnt = !pctAntiguoFilter || claseAntigua === pctAntiguoFilter;
+            const matchPctNue = !pctNuevoFilter   || claseNueva   === pctNuevoFilter;
 
-    const totalPages = Math.ceil(filtered.length / rowsPerPage);
-    const paged = filtered.slice((page - 1) * rowsPerPage, page * rowsPerPage);
+            return matchTab && matchEstadoIdx && matchVariacion && matchRevision && matchSearch && matchPctAnt && matchPctNue;
+        }), [effTab, effEstadoIdx, effVariacion, filterRevision, revisiones, search, pctAntiguoFilter, pctNuevoFilter, SAMPLE_DATA]); // eslint-disable-line
+
+    // Aplicar ordenamiento por columna Variación sobre el conjunto filtrado
+    // Usa los mismos campos que muestra la columna: variacion_balanceados ?? variacion_no_balanceados
+    const sorted = useMemo(() => {
+        if (!variacionSort) return filtered;
+        const copy = [...filtered];
+        copy.sort((a, b) => {
+            const va = parseFloat(a.variacion_balanceados ?? a.variacion_no_balanceados ?? null);
+            const vb = parseFloat(b.variacion_balanceados ?? b.variacion_no_balanceados ?? null);
+            if (isNaN(va) && isNaN(vb)) return 0;
+            if (isNaN(va)) return 1;  // sin variación va al final siempre
+            if (isNaN(vb)) return -1;
+            return variacionSort === 'asc' ? va - vb : vb - va;
+        });
+        return copy;
+    }, [filtered, variacionSort]);
+
+    // Valores únicos para los filtros por columna
+    // Extrae la clase directamente del campo pct_dominancia_* (igual que lo que se muestra en la celda)
+    const uniqueAntiguas = useMemo(() => {
+        const s = new Set();
+        SAMPLE_DATA.forEach(r => {
+            const clase = extractClaseFromPct(r.pct_dominancia_antigua);
+            if (clase) s.add(clase);
+        });
+        return Array.from(s).sort();
+    }, [SAMPLE_DATA]);
+    const uniqueNuevas = useMemo(() => {
+        const s = new Set();
+        SAMPLE_DATA.forEach(r => {
+            const clase = extractClaseFromPct(r.pct_dominancia_nuevo ?? r.pct_dominancia_nueva);
+            if (clase) s.add(clase);
+        });
+        return Array.from(s).sort();
+    }, [SAMPLE_DATA]);
+
+    const totalPages = Math.ceil(sorted.length / rowsPerPage);
+    const paged = sorted.slice((page - 1) * rowsPerPage, page * rowsPerPage);
     const totalGeneral = SAMPLE_DATA.reduce((s, r) => s + r.valor, 0);
     const allPageSel = paged.length > 0 && paged.every(r => selected.includes(r.id));
     const selCount = selected.length;
-    const filterKey = `${effTab}|${search}|${effEstadoIdx ?? ''}|${effVariacion ?? ''}|${filterRevision ?? ''}|${page}`;
+    const filterKey = `${effTab}|${search}|${effEstadoIdx ?? ''}|${effVariacion ?? ''}|${filterRevision ?? ''}|${pctAntiguoFilter ?? ''}|${pctNuevoFilter ?? ''}|${variacionSort ?? ''}|${page}`;
 
     const toggleAll = () => {
         if (allPageSel) setSelected(s => s.filter(id => !paged.some(r => r.id === id)));
@@ -1233,9 +1299,68 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                     <div style={{ flex: 1, minWidth: 0 }}>Instrumento</div>
                     <div style={{ width: COL.id_inst, flexShrink: 0 }}>ID</div>
                     <div style={{ width: COL.estado, flexShrink: 0 }}>Estado</div>
-                    <div style={{ width: COL.pct_antiguo, flexShrink: 0, textAlign: 'right' }}>PCT Antiguo</div>
-                    <div style={{ width: COL.pct_nuevo, flexShrink: 0, textAlign: 'right' }}>PCT Nuevo</div>
-                    <div style={{ width: COL.variacion, flexShrink: 0, textAlign: 'right' }}>Variación</div>
+                    <div style={{ width: COL.pct_antiguo, flexShrink: 0, textAlign: 'right', position: 'relative' }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
+                            <span style={{ color: pctAntiguoFilter ? '#299D91' : undefined }}>PCT Antiguo</span>
+                            <button
+                                onMouseDown={e => { e.stopPropagation(); setShowPctAntiguoMenu(v => !v); setShowPctNuevoMenu(false); }}
+                                title="Filtrar por clasificación antigua"
+                                style={{ width: 20, height: 20, borderRadius: 5, border: 'none', background: pctAntiguoFilter ? '#EBF7F6' : 'transparent', cursor: 'pointer', color: pctAntiguoFilter ? '#299D91' : '#9F9F9F', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', flexShrink: 0 }}
+                            >
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+                            </button>
+                        </div>
+                        {showPctAntiguoMenu && (
+                            <div onMouseDown={e => e.stopPropagation()} style={{ position: 'absolute', right: 0, top: 'calc(100% + 8px)', zIndex: 60, backgroundColor: '#FFFFFF', borderRadius: 10, border: '1px solid #DDE3E6', boxShadow: '0 12px 24px rgba(0,0,0,0.10)', padding: '6px 4px', minWidth: 150, maxHeight: 260, overflowY: 'auto' }}>
+                                {[null, ...uniqueAntiguas].map(v => (
+                                    <button key={v ?? '__all__'} onClick={() => { setPctAntiguoFilter(v); setShowPctAntiguoMenu(false); setPage(1); }}
+                                        style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '7px 12px', border: 'none', borderRadius: 6, background: (v === null ? pctAntiguoFilter == null : pctAntiguoFilter === v) ? '#EBF7F6' : 'transparent', cursor: 'pointer', fontSize: 13, fontWeight: (v === null ? pctAntiguoFilter == null : pctAntiguoFilter === v) ? 700 : 400, color: (v === null ? pctAntiguoFilter == null : pctAntiguoFilter === v) ? '#299D91' : '#191919' }}
+                                    >{v ?? 'Todos'}</button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <div style={{ width: COL.pct_nuevo, flexShrink: 0, textAlign: 'right', position: 'relative' }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
+                            <span style={{ color: pctNuevoFilter ? '#299D91' : undefined }}>PCT Nuevo</span>
+                            <button
+                                onMouseDown={e => { e.stopPropagation(); setShowPctNuevoMenu(v => !v); setShowPctAntiguoMenu(false); }}
+                                title="Filtrar por clasificación nueva"
+                                style={{ width: 20, height: 20, borderRadius: 5, border: 'none', background: pctNuevoFilter ? '#EBF7F6' : 'transparent', cursor: 'pointer', color: pctNuevoFilter ? '#299D91' : '#9F9F9F', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', flexShrink: 0 }}
+                            >
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+                            </button>
+                        </div>
+                        {showPctNuevoMenu && (
+                            <div onMouseDown={e => e.stopPropagation()} style={{ position: 'absolute', right: 0, top: 'calc(100% + 8px)', zIndex: 60, backgroundColor: '#FFFFFF', borderRadius: 10, border: '1px solid #DDE3E6', boxShadow: '0 12px 24px rgba(0,0,0,0.10)', padding: '6px 4px', minWidth: 150, maxHeight: 260, overflowY: 'auto' }}>
+                                {[null, ...uniqueNuevas].map(v => (
+                                    <button key={v ?? '__all__'} onClick={() => { setPctNuevoFilter(v); setShowPctNuevoMenu(false); setPage(1); }}
+                                        style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '7px 12px', border: 'none', borderRadius: 6, background: (v === null ? pctNuevoFilter == null : pctNuevoFilter === v) ? '#EBF7F6' : 'transparent', cursor: 'pointer', fontSize: 13, fontWeight: (v === null ? pctNuevoFilter == null : pctNuevoFilter === v) ? 700 : 400, color: (v === null ? pctNuevoFilter == null : pctNuevoFilter === v) ? '#299D91' : '#191919' }}
+                                    >{v ?? 'Todos'}</button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <div style={{ width: COL.variacion, flexShrink: 0, textAlign: 'right' }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
+                            <span>Variación</span>
+                            <button
+                                onClick={() => setVariacionSort(s => s === null ? 'desc' : s === 'desc' ? 'asc' : null)}
+                                title={variacionSort === null ? 'Ordenar mayor → menor' : variacionSort === 'desc' ? 'Ordenar menor → mayor' : 'Quitar orden'}
+                                style={{ width: 20, height: 20, borderRadius: 5, border: 'none', background: variacionSort ? '#EBF7F6' : 'transparent', cursor: 'pointer', color: variacionSort ? '#299D91' : '#9F9F9F', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
+                            >
+                                {variacionSort === 'asc' ? (
+                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15" /></svg>
+                                ) : variacionSort === 'desc' ? (
+                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+                                ) : (
+                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg>
+                                )}
+                            </button>
+                        </div>
+                    </div>
                     <div style={{ width: COL.acciones, flexShrink: 0 }} />
                 </div>
 
