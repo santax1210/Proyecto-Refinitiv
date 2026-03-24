@@ -482,6 +482,20 @@ def load_allocations_antiguas_region(df_instruments, antiguas_path):
         df_result['Base Region:'] = ''
         return df_result[base_cols + ['Pct_dominancia', 'Base Region:']]
 
+    # Normalizar porcentajes mal formateados: algunos archivos vienen con valores
+    # como 884.39 en lugar de 88.439. Si un valor supera 120, se mueve el separador decimal
+    # un lugar a la izquierda (divide por 10).
+    for col in cols_region:
+        df_result[col] = pd.to_numeric(
+            df_result[col].astype(str).str.strip().str.replace(',', '.', regex=False),
+            errors='coerce'
+        )
+        mask_mal_formateado = df_result[col] > 120
+        if mask_mal_formateado.any():
+            n = mask_mal_formateado.sum()
+            print(f"  [FIX] Columna '{col}': {n} valor(es) >120% corregidos (decimal a la izquierda, /10) en allocations antiguas de región.")
+            df_result.loc[mask_mal_formateado, col] = df_result.loc[mask_mal_formateado, col] / 10
+
     # Calcular Pct_dominancia
     df_result['Pct_dominancia'] = df_result.apply(
         lambda row: _calcular_pct_dominancia_antiguas_region(row, cols_region), axis=1

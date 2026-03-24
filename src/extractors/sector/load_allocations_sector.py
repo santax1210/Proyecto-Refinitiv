@@ -36,6 +36,9 @@ def _cargar_archivo_nuevas_sector(nuevas_path):
     df = pd.DataFrame(rows, columns=headers)
     df.columns = df.columns.str.strip()
 
+    # Eliminar la columna de índice sin nombre que genera el CSV (evita romper el groupby)
+    df = df.loc[:, df.columns != '']
+
     if 'classif' in df.columns:
         df = df[df['classif'].astype(str).str.strip().str.lower() == 'industry'].copy()
     else:
@@ -51,7 +54,12 @@ def _cargar_archivo_nuevas_sector(nuevas_path):
 
     if 'class' in df.columns:
         df['class'] = df['class'].astype(str).str.strip()
-        df['class'] = df['class'].map(lambda x: MAPEO_SECTORES_INDUSTRY.get(x, 'Otros'))
+        # Normalizar a minúsculas con guiones bajos para coincidir con las claves del mapeo
+        # Los datos raw vienen en MAYÚSCULAS con espacios (ej: "FINANCIALS", "CONSUMER CYCLICALS")
+        # mientras que MAPEO_SECTORES_INDUSTRY usa claves en minúsculas con guiones bajos
+        df['class'] = df['class'].map(
+            lambda x: MAPEO_SECTORES_INDUSTRY.get(x.lower().replace(' ', '_'), 'Otros')
+        )
 
     if 'percentage' in df.columns and 'class' in df.columns:
         cols_agrupar = [c for c in df.columns if c != 'percentage']

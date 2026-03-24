@@ -1,4 +1,4 @@
-import { useRef, useState, useMemo, useEffect } from 'react';
+import { useRef, useState, useMemo, useEffect, useCallback } from 'react';
 import { downloadExport, downloadFilteredExport } from '../services/apiService';
 import { useToast } from '../context/ToastContext';
 
@@ -33,6 +33,53 @@ function ExternalLinkIcon() {
 import { useApp } from '../context/AppContext';
 
 const TABS = ['Todos', 'Balanceado', 'No Balanceado', 'Sin datos'];
+
+// ── Workflow guiado ──────────────────────────────────────────────────────────
+const WORKFLOW_STEPS = [
+    // Paso 1 · Sin cambios · Baja variación
+    { paso: 1, sub: 1, tab: 'Balanceado',    estadoIdx: 1, variacion: 'Baja',
+      label: 'Balanceados · Estado 1 · Baja variación',
+      desc: 'Instrumentos ya balanceados, sin cambio de clasificación y con baja variación. Los casos más seguros y directos de validar.' },
+    { paso: 1, sub: 2, tab: 'No Balanceado', estadoIdx: 1, variacion: 'Baja',
+      label: 'No Balanceados · Estado 1 · Baja variación',
+      desc: 'Instrumentos no balanceados, sin cambio de clasificación y con baja variación. Validación directa y segura.' },
+    // Paso 2 · Con cambios · Baja variación
+    { paso: 2, sub: 1, tab: 'Balanceado',    estadoIdx: 2, variacion: 'Baja',
+      label: 'Balanceados · Estado 2 · Baja variación',
+      desc: 'Instrumentos balanceados con cambio de clasificación y baja variación. Revisar los cambios antes de validar.' },
+    { paso: 2, sub: 2, tab: 'No Balanceado', estadoIdx: 2, variacion: 'Baja',
+      label: 'No Balanceados · Estado 2 · Baja variación',
+      desc: 'Instrumentos no balanceados con cambio de clasificación y baja variación. Revisar los cambios antes de validar.' },
+    // Paso 3 · Sin cambios · Alta variación
+    { paso: 3, sub: 1, tab: 'Balanceado',    estadoIdx: 1, variacion: 'Alta',
+      label: 'Balanceados · Estado 1 · Alta variación',
+      desc: 'Instrumentos balanceados sin cambio de clasificación, pero con alta variación. Pueden existir casos especiales que requieren atención.' },
+    { paso: 3, sub: 2, tab: 'No Balanceado', estadoIdx: 1, variacion: 'Alta',
+      label: 'No Balanceados · Estado 1 · Alta variación',
+      desc: 'Instrumentos no balanceados sin cambio, pero con alta variación. Revisar en detalle por posibles casos especiales.' },
+    // Paso 4 · Con cambios · Alta variación
+    { paso: 4, sub: 1, tab: 'Balanceado',    estadoIdx: 2, variacion: 'Alta',
+      label: 'Balanceados · Estado 2 · Alta variación',
+      desc: 'Instrumentos balanceados con cambio de clasificación y alta variación. Revisión detallada necesaria.' },
+    { paso: 4, sub: 2, tab: 'No Balanceado', estadoIdx: 2, variacion: 'Alta',
+      label: 'No Balanceados · Estado 2 · Alta variación',
+      desc: 'Instrumentos no balanceados con cambio y alta variación. Mayor complejidad, revisar cada caso individualmente.' },
+    // Paso 5 · Estado 3 · Los casos más críticos
+    { paso: 5, sub: 1, tab: 'Balanceado',    estadoIdx: 3, variacion: null,
+      label: 'Balanceados · Estado 3',
+      desc: 'Casos con cambios significativos en balanceados. Requieren revisión exhaustiva.' },
+    { paso: 5, sub: 2, tab: 'No Balanceado', estadoIdx: 3, variacion: null,
+      label: 'No Balanceados · Estado 3',
+      desc: 'Los casos más complejos: cambios críticos en instrumentos no balanceados. Revisar cada instrumento individualmente.' },
+];
+
+const PASO_META = [
+    { num: 1, title: 'Sin cambios',    subtitle: 'Baja variación',    color: '#299D91', bg: '#EBF7F6' },
+    { num: 2, title: 'Con cambios',    subtitle: 'Baja variación',    color: '#3B82F6', bg: '#EFF6FF' },
+    { num: 3, title: 'Sin cambios',    subtitle: 'Alta variación',    color: '#F59E0B', bg: '#FFFBEB' },
+    { num: 4, title: 'Con cambios',    subtitle: 'Alta variación',    color: '#F97316', bg: '#FFF7ED' },
+    { num: 5, title: 'Estado crítico', subtitle: 'Rev. exhaustiva',   color: '#D94A38', bg: '#FFF0EE' },
+];
 
 const ESTADO_CFG = {
     'Balanceado': { dot: '#299D91', bg: '#EBF7F6', text: '#299D91' },
@@ -77,7 +124,7 @@ const borderTop = { borderTop: '1px solid #F0F0F0' };
 
 
 export default function ValidacionPage({ onNavigate, onSelect }) {
-    const { validationData, loadValidationResults, summary, activeClasificacion, setActiveClasificacion, validationDataMap } = useApp();
+    const { validationData, loadValidationResults, summary, activeClasificacion, setActiveClasificacion, validationDataMap, completedPasosMap, updateCompletedPasos } = useApp();
     const toast = useToast();
 
     const [activeTab, setActiveTab] = useState('Todos');
@@ -92,6 +139,14 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
     const [loading, setLoading] = useState(false);
     const [downloading, setDownloading] = useState(null); // 'balanceados', 'no_balanceados', 'sin_datos', null
     const [showGlosario, setShowGlosario] = useState(false);
+    // Workflow guiado
+    const [workflowMode, setWorkflowMode] = useState(true);        // true = guiado, false = libre
+    const [workflowSubStepIdx, setWorkflowSubStepIdx] = useState(0); // 0-9
+    // completedPasos viene del contexto global — persiste al navegar entre páginas
+    const completedPasos = useMemo(
+        () => new Set(completedPasosMap[activeClasificacion] || []),
+        [completedPasosMap, activeClasificacion]
+    );
     const rowsPerPage = 15;
 
     // Ref siempre actualizado con la clasificación activa — evita que los efectos de
@@ -124,6 +179,18 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
             const savedRev = localStorage.getItem(`allocations_revisiones_${activeClasificacion}`);
             setRevisiones(savedRev ? JSON.parse(savedRev) : {});
         } catch { setRevisiones({}); }
+
+        // Restaurar estado del workflow
+        try {
+            const wfMode = localStorage.getItem(`allocations_wf_mode_${activeClasificacion}`);
+            setWorkflowMode(wfMode !== 'false'); // default: true
+            const wfStep = localStorage.getItem(`allocations_wf_step_${activeClasificacion}`);
+            const idx = wfStep !== null ? parseInt(wfStep, 10) : 0;
+            setWorkflowSubStepIdx(!isNaN(idx) ? Math.max(0, Math.min(idx, WORKFLOW_STEPS.length - 1)) : 0);
+        } catch {
+            setWorkflowMode(true);
+            setWorkflowSubStepIdx(0);
+        }
     }, [activeClasificacion]);
 
     // Persistir revisiones cuando cambian (usa ref para clave correcta)
@@ -144,6 +211,15 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
         } catch { /* cuota excedida u otro error, ignorar */ }
     }, [activeTab, search, filterEstadoIdx, filterVariacion, filterRevision, page]);
 
+    // Persistir estado del workflow (modo y sub-paso)
+    useEffect(() => {
+        if (!activeClasifRef.current) return;
+        try {
+            localStorage.setItem(`allocations_wf_mode_${activeClasifRef.current}`, String(workflowMode));
+            localStorage.setItem(`allocations_wf_step_${activeClasifRef.current}`, String(workflowSubStepIdx));
+        } catch { /* ignorar */ }
+    }, [workflowMode, workflowSubStepIdx]);
+
     // Cargar datos al montar y cuando cambia la clasificación activa (si no hay datos en memoria)
     useEffect(() => {
         if (!validationData && activeClasificacion) {
@@ -163,55 +239,109 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
     // Usar los datos reales o array vacío si no hay datos
     const SAMPLE_DATA = validationData || [];
 
-    // Filtrado basado en moneda_nueva / region_nueva / sector_nueva y Cambio
+    // ── Filtros efectivos según modo (guiado vs. libre) ──────────────────────
+    const _wfStep = WORKFLOW_STEPS[workflowSubStepIdx] ?? WORKFLOW_STEPS[0];
+    const effTab       = workflowMode ? _wfStep.tab       : activeTab;
+    const effEstadoIdx = workflowMode ? _wfStep.estadoIdx : filterEstadoIdx;
+    const effVariacion = workflowMode ? _wfStep.variacion : filterVariacion;
+
+    // Conteos del sub-paso actual para el banner
+    const wfStepCounts = useMemo(() => {
+        const step = _wfStep;
+        const rows = SAMPLE_DATA.filter(r => {
+            const cn = r.moneda_nueva ?? r.region_nueva ?? r.sector_nueva;
+            let mt = false;
+            if (step.tab === 'Balanceado')    mt = cn && cn.toLowerCase() === 'balanceado' && r.Cambio !== 'Sin datos';
+            else if (step.tab === 'No Balanceado') mt = cn && cn.toLowerCase() !== 'balanceado' && cn.trim() !== '' && r.Cambio !== 'Sin datos';
+            const me = step.estadoIdx === 1 ? r.Estado === 'Estado_1'
+                     : step.estadoIdx === 2 ? r.Estado === 'Estado_2'
+                     : step.estadoIdx === 3 ? r.Estado === 'Estado_3' : true;
+            const mv = !step.variacion || r.nivel_variacion === step.variacion;
+            return mt && me && mv;
+        });
+        const total      = rows.length;
+        const validados  = rows.filter(r => revisiones[r.ID] === 'Validado').length;
+        const rechazados = rows.filter(r => revisiones[r.ID] === 'Rechazado').length;
+        return { total, revisados: validados + rechazados, validados, rechazados };
+    }, [workflowSubStepIdx, SAMPLE_DATA, revisiones]); // eslint-disable-line
+
+    // Callback para salir del modo guiado (sincroniza los filtros manuales al paso actual)
+    const exitWorkflowMode = useCallback((finalizado = false) => {
+        if (finalizado) {
+            setActiveTab('Balanceado');
+            setFilterEstadoIdx(null);
+            setFilterVariacion(null);
+            setFilterRevision('Validado');
+            // Guardar inmediatamente en localStorage para persistencia
+            if (activeClasifRef.current) {
+                try {
+                    localStorage.setItem(`allocations_filtros_${activeClasifRef.current}`, JSON.stringify({
+                        activeTab: 'Balanceado',
+                        search: '',
+                        filterEstadoIdx: null,
+                        filterVariacion: null,
+                        filterRevision: 'Validado',
+                        page: 1,
+                    }));
+                } catch {/* ignorar */}
+            }
+        } else {
+            setActiveTab(_wfStep.tab);
+            setFilterEstadoIdx(_wfStep.estadoIdx);
+            setFilterVariacion(_wfStep.variacion);
+        }
+        setWorkflowMode(false);
+    }, [_wfStep]);
+
+    // Filtrado principal
     const filtered = useMemo(() =>
         SAMPLE_DATA.filter(r => {
             const clasificacionNueva = r.moneda_nueva ?? r.region_nueva ?? r.sector_nueva;
             const clasificacionAntigua = r.moneda_antigua ?? r.region_antigua ?? r.sector_antigua;
-            // Filtro por Tab
+
+            // Filtro por Tab (efectivo según modo)
             let matchTab = true;
-            if (activeTab === 'Balanceado') {
+            if (effTab === 'Balanceado') {
                 matchTab = clasificacionNueva && clasificacionNueva.toLowerCase() === 'balanceado' && r.Cambio !== 'Sin datos';
-            } else if (activeTab === 'No Balanceado') {
+            } else if (effTab === 'No Balanceado') {
                 matchTab = clasificacionNueva &&
                           clasificacionNueva.toLowerCase() !== 'balanceado' &&
                           clasificacionNueva.trim() !== '' &&
                           r.Cambio !== 'Sin datos';
-            } else if (activeTab === 'Sin datos') {
+            } else if (effTab === 'Sin datos') {
                 matchTab = r.Cambio === 'Sin datos';
             }
-            // activeTab === 'Todos' → matchTab = true (todos pasan)
 
-            // Filtro por Estado
-            const matchEstadoIdx = !filterEstadoIdx || (() => {
-                if (filterEstadoIdx === 1) return r.Estado === 'Estado_1';
-                if (filterEstadoIdx === 2) return r.Estado === 'Estado_2';
-                if (filterEstadoIdx === 3) return r.Estado === 'Estado_3';
+            // Filtro por Estado (efectivo según modo)
+            const matchEstadoIdx = !effEstadoIdx || (() => {
+                if (effEstadoIdx === 1) return r.Estado === 'Estado_1';
+                if (effEstadoIdx === 2) return r.Estado === 'Estado_2';
+                if (effEstadoIdx === 3) return r.Estado === 'Estado_3';
                 return true;
             })();
 
-            // Filtro por nivel de variación (calculado en el backend, campo nivel_variacion)
-            const matchVariacion = !filterVariacion || r.nivel_variacion === filterVariacion;
+            // Filtro por nivel de variación (efectivo según modo)
+            const matchVariacion = !effVariacion || r.nivel_variacion === effVariacion;
 
-            // Filtro por revisión (estado local: Validado, Rechazado, Sin revisar)
+            // Filtro por revisión — siempre libre
             const revisionRow = revisiones[r.ID] || 'Sin revisar';
             const matchRevision = !filterRevision || revisionRow === filterRevision;
 
-            // Filtro de búsqueda
+            // Búsqueda — siempre libre
             const matchSearch = !search ||
                 (r.Nombre && r.Nombre.toLowerCase().includes(search.toLowerCase())) ||
                 (r.ID && r.ID.toString().toLowerCase().includes(search.toLowerCase())) ||
                 (clasificacionAntigua && clasificacionAntigua.toLowerCase().includes(search.toLowerCase()));
-            
+
             return matchTab && matchEstadoIdx && matchVariacion && matchRevision && matchSearch;
-        }), [activeTab, filterEstadoIdx, filterVariacion, filterRevision, revisiones, search, SAMPLE_DATA]); // eslint-disable-line
+        }), [effTab, effEstadoIdx, effVariacion, filterRevision, revisiones, search, SAMPLE_DATA]); // eslint-disable-line
 
     const totalPages = Math.ceil(filtered.length / rowsPerPage);
     const paged = filtered.slice((page - 1) * rowsPerPage, page * rowsPerPage);
     const totalGeneral = SAMPLE_DATA.reduce((s, r) => s + r.valor, 0);
     const allPageSel = paged.length > 0 && paged.every(r => selected.includes(r.id));
     const selCount = selected.length;
-    const filterKey = `${activeTab}|${search}|${filterEstadoIdx ?? ''}|${filterVariacion ?? ''}|${filterRevision ?? ''}|${page}`;
+    const filterKey = `${effTab}|${search}|${effEstadoIdx ?? ''}|${effVariacion ?? ''}|${filterRevision ?? ''}|${page}`;
 
     const toggleAll = () => {
         if (allPageSel) setSelected(s => s.filter(id => !paged.some(r => r.id === id)));
@@ -392,50 +522,6 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                 </div>
             )}
 
-            {/* ── Selector de clasificación ── */}
-            {(() => {
-                const OPCIONES = [
-                    { key: 'moneda',  label: 'Moneda' },
-                    { key: 'region',  label: 'Región' },
-                    { key: 'sector',  label: 'Industria' },
-                ];
-                return (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: '#9F9F9F', textTransform: 'uppercase', letterSpacing: '0.09em', flexShrink: 0 }}>
-                            Vista:
-                        </span>
-                        {OPCIONES.map(({ key, label }) => {
-                            const isActive = activeClasificacion === key;
-                            const hasData = !!validationDataMap[key];
-                            return (
-                                <button
-                                    key={key}
-                                    onClick={() => { if (hasData || isActive) setActiveClasificacion(key); }}
-                                    title={!hasData && !isActive ? `No hay datos procesados para ${label}` : label}
-                                    style={{
-                                        display: 'inline-flex', alignItems: 'center', gap: 6,
-                                        padding: '5px 13px', borderRadius: 20,
-                                        border: `1.5px solid ${isActive ? '#299D91' : hasData ? '#DDE3E6' : '#E8ECEF'}`,
-                                        backgroundColor: isActive ? '#EBF7F6' : hasData ? '#FFFFFF' : '#F5F6F8',
-                                        color: isActive ? '#299D91' : hasData ? '#525256' : '#C0C4CA',
-                                        fontSize: 12, fontWeight: isActive ? 700 : 500,
-                                        cursor: hasData && !isActive ? 'pointer' : isActive ? 'default' : 'not-allowed',
-                                        transition: 'all 0.15s',
-                                    }}
-                                    onMouseEnter={e => { if (hasData && !isActive) { e.currentTarget.style.borderColor = '#299D91'; e.currentTarget.style.color = '#299D91'; } }}
-                                    onMouseLeave={e => { if (hasData && !isActive) { e.currentTarget.style.borderColor = '#DDE3E6'; e.currentTarget.style.color = '#525256'; } }}
-                                >
-                                    {hasData && (
-                                        <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: isActive ? '#299D91' : '#9F9F9F', flexShrink: 0 }} />
-                                    )}
-                                    {label}
-                                </button>
-                            );
-                        })}
-                    </div>
-                );
-            })()}
-
             {/* ── Skeleton de carga ── */}
             {loading && (
                 <div style={{ backgroundColor: '#FFFFFF', borderRadius: 16, border: '1px solid #DDE3E6', overflow: 'hidden' }}>
@@ -508,34 +594,158 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
             {!loading && SAMPLE_DATA.length > 0 && (
                 <>
 
+            {/* ════════════════════════════════════════════════════
+                BARRA WIZARD: 5 pasos de validación
+            ════════════════════════════════════════════════════ */}
+            {(() => {
+                // Un paso está completo si el usuario presionó Siguiente para avanzar más allá de él
+                const isPasoCompleto = (pasoNum) => completedPasos.has(pasoNum);
+
+                return (
+                    <div style={{ backgroundColor: '#FFFFFF', borderRadius: 10, border: '1px solid #DDE3E6', padding: '8px 14px 4px 14px', boxShadow: '0 2px 4px rgba(0,0,0,0.04)', marginBottom: 8 }}>
+                        {/* Título + toggle modo libre */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                            <div>
+                                <p style={{ margin: 0, fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9F9F9F' }}>Flujo de Validación</p>
+                                {/* Línea de subpaso eliminada para mayor simpleza visual */}
+                                {!workflowMode && (
+                                    <p style={{ margin: '2px 0 0', fontSize: 12, color: '#525256' }}>Modo libre activo — filtrá manualmente</p>
+                                )}
+                            </div>
+                            <button
+                                onClick={() => {
+                                    if (workflowMode) {
+                                        exitWorkflowMode();
+                                    } else {
+                                        setWorkflowMode(true);
+                                    }
+                                }}
+                                style={{
+                                    display: 'flex', alignItems: 'center', gap: 6,
+                                    padding: '6px 14px', borderRadius: 20,
+                                    border: `1.5px solid ${workflowMode ? '#DDE3E6' : '#299D91'}`,
+                                    backgroundColor: workflowMode ? '#F8FAFC' : '#EBF7F6',
+                                    color: workflowMode ? '#71717A' : '#299D91',
+                                    fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
+                                }}
+                                onMouseEnter={e => { e.currentTarget.style.opacity = '0.8'; }}
+                                onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}
+                            >
+                                {workflowMode ? (
+                                    <>
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                                        Modo libre
+                                    </>
+                                ) : (
+                                    <>
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0"/><polyline points="12 8 12 12 14 14"/></svg>
+                                        Volver al flujo
+                                    </>
+                                )}
+                            </button>
+                        </div>
+
+                        {/* Pasos */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 0, minHeight: 0 }}>
+                            {PASO_META.map((meta, i) => {
+                                const isActive  = workflowMode && _wfStep.paso === meta.num;
+                                const isCompleto = isPasoCompleto(meta.num);
+                                const isFuturo  = workflowMode && _wfStep.paso < meta.num && !isCompleto;
+                                const firstSubIdx = WORKFLOW_STEPS.findIndex(s => s.paso === meta.num);
+
+                                return (
+                                    <div key={meta.num} style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
+                                        {/* Conector izquierdo */}
+                                        {i > 0 && (
+                                            <div style={{
+                                                flex: 1, height: 2,
+                                                backgroundColor: isPasoCompleto(PASO_META[i-1].num) ? '#299D91' : '#E5E7EB',
+                                                transition: 'background-color 0.3s',
+                                            }} />
+                                        )}
+
+                                        {/* Nodo del paso */}
+                                        <button
+                                            onClick={() => {
+                                                setWorkflowSubStepIdx(firstSubIdx);
+                                                setWorkflowMode(true);
+                                                setPage(1);
+                                            }}
+                                            title={`Ir al Paso ${meta.num}: ${meta.title}`}
+                                            style={{
+                                                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+                                                background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px',
+                                                flexShrink: 0,
+                                            }}
+                                        >
+                                            {/* Círculo numerado */}
+                                            <div style={{
+                                                width: 22, height: 22, borderRadius: '50%',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                backgroundColor: isCompleto ? '#299D91' : isActive ? meta.color : '#F3F4F6',
+                                                border: `2px solid ${isCompleto ? '#299D91' : isActive ? meta.color : isFuturo ? '#E5E7EB' : '#DDE3E6'}`,
+                                                color: isCompleto || isActive ? '#FFFFFF' : '#9F9F9F',
+                                                fontSize: 11, fontWeight: 700,
+                                                boxShadow: isActive ? `0 0 0 2px ${meta.bg}` : 'none',
+                                                transition: 'all 0.2s',
+                                            }}>
+                                                {isCompleto
+                                                    ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                                                    : meta.num
+                                                }
+                                            </div>
+                                            {/* Etiqueta */}
+                                            <div style={{ textAlign: 'center' }}>
+                                                <div style={{ fontSize: 9.5, fontWeight: 700, color: isActive ? meta.color : isCompleto ? '#299D91' : '#9F9F9F', whiteSpace: 'nowrap' }}>
+                                                    {meta.title}
+                                                </div>
+                                                <div style={{ fontSize: 8.5, color: '#B0B0B0', whiteSpace: 'nowrap' }}>
+                                                    {meta.subtitle}
+                                                </div>
+                                            </div>
+                                        </button>
+
+                                        {/* Conector derecho (solo en último nodo a la derecha) */}
+                                        {i < PASO_META.length - 1 && (
+                                            <div style={{
+                                                flex: 1, height: 2,
+                                                backgroundColor: isCompleto ? '#299D91' : '#E5E7EB',
+                                                transition: 'background-color 0.3s',
+                                            }} />
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                );
+            })()}
+
             {/* ── Encabezado ── */}
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                         <div>
-                            <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#9F9F9F', marginBottom: 4 }}>
-                                VALIDACIÓN
-                            </p>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                                 <h1 style={{ fontSize: 20, fontWeight: 700, color: '#191919', margin: 0 }}>
-                                    Resultados de Allocations
+                                    Tabla Validacion
                                 </h1>
                                 {/* Contador de validados por filtro activo */}
                                 {(() => {
                                     let tabRows = [];
-                                    if (activeTab === 'Todos') {
+                                    if (effTab === 'Todos') {
                                         tabRows = SAMPLE_DATA;
-                                    } else if (activeTab === 'Balanceado') {
+                                    } else if (effTab === 'Balanceado') {
                                         tabRows = SAMPLE_DATA.filter(r => {
                                             const clasificacionNueva = r.moneda_nueva ?? r.region_nueva ?? r.sector_nueva;
                                             return clasificacionNueva && clasificacionNueva.toLowerCase() === 'balanceado' && r.Cambio !== 'Sin datos';
                                         });
-                                    } else if (activeTab === 'No Balanceado') {
+                                    } else if (effTab === 'No Balanceado') {
                                         tabRows = SAMPLE_DATA.filter(r => {
                                             const clasificacionNueva = r.moneda_nueva ?? r.region_nueva ?? r.sector_nueva;
                                             return clasificacionNueva && clasificacionNueva.toLowerCase() !== 'balanceado' && clasificacionNueva.trim() !== '' && r.Cambio !== 'Sin datos';
                                         });
-                                    } else if (activeTab === 'Sin datos') {
+                                    } else if (effTab === 'Sin datos') {
                                         tabRows = SAMPLE_DATA.filter(r => r.Cambio === 'Sin datos');
                                     }
                                     const validadosTab = tabRows.filter(r => revisiones[r.ID] === 'Validado').length;
@@ -546,7 +756,7 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                                             background: '#EBF7F6', borderRadius: 8, padding: '3px 12px',
                                             marginLeft: 2
                                         }}
-                                        title={`Instrumentos validados en "${activeTab}"`}
+                                        title={`Instrumentos validados en "${effTab}"`}
                                         >
                                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#299D91" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 2 }}>
                                                 <polyline points="20 6 9 17 4 12" />
@@ -607,18 +817,28 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                             tabRows = SAMPLE_DATA.filter(r => r.Cambio === 'Sin datos');
                         }
                         const count = tabRows.length;
-                        const isActive = activeTab === tab;
+                        // En modo guiado la tab activa la dicta el workflow (effTab)
+                        const isActive = workflowMode ? effTab === tab : activeTab === tab;
+                        // En modo guiado las tabs Todos/Sin datos no son relevantes — baja opacidad
+                        const isIrrelevant = workflowMode && (tab === 'Todos' || tab === 'Sin datos');
                         return (
                             <button
                                 key={tab}
-                                onClick={() => { setActiveTab(tab); setPage(1); }}
+                                onClick={() => {
+                                    if (workflowMode) return; // en modo guiado las tabs no son clicables
+                                    setActiveTab(tab); setPage(1);
+                                }}
+                                title={workflowMode ? 'Las tabs son gestionadas por el flujo guiado. Usá "Modo libre" para filtrar manualmente.' : tab}
                                 style={{
                                     display: 'flex', alignItems: 'center', gap: 8,
                                     padding: '8px 18px',
-                                    fontSize: 14, fontWeight: 600, cursor: 'pointer',
+                                    fontSize: 14, fontWeight: 600,
+                                    cursor: workflowMode ? 'default' : 'pointer',
                                     color: isActive ? '#299D91' : '#71717A',
                                     border: 'none', background: 'transparent',
                                     position: 'relative',
+                                    opacity: isIrrelevant ? 0.35 : 1,
+                                    transition: 'opacity 0.2s',
                                 }}
                             >
                                 {tab}
@@ -637,73 +857,227 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                     })}
                 </div>
 
+                {/* ── Banner del sub-paso (solo en modo guiado) ── */}
+                {workflowMode && (() => {
+                    const step    = _wfStep;
+                    const meta    = PASO_META[step.paso - 1];
+                    const { total, revisados, validados, rechazados } = wfStepCounts;
+                    const pct     = total > 0 ? Math.round((revisados / total) * 100) : 0;
+                    const allDone = total > 0 && revisados === total;
+                    const isLast  = workflowSubStepIdx === WORKFLOW_STEPS.length - 1;
+                    const isLastSubInPaso = step.sub === 2; // sub-paso 2 es el último de cada paso
+
+                    return (
+                        <div style={{
+                            margin: `0 ${PX}px`,
+                            marginTop: 10,
+                            marginBottom: 2,
+                            borderRadius: 12,
+                            border: `1.5px solid ${allDone ? '#299D91' : meta.color + '40'}`,
+                            backgroundColor: allDone ? '#EBF7F6' : meta.bg,
+                            padding: '12px 16px',
+                            transition: 'all 0.2s',
+                        }}>
+                            {/* Fila superior: info + navegación */}
+                            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                                {/* Indicador paso · sub-paso + descripción */}
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+                                        <span style={{
+                                            fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6,
+                                            backgroundColor: allDone ? '#299D91' : meta.color,
+                                            color: '#FFFFFF',
+                                        }}>
+                                            Paso {step.paso} · {step.sub}/2
+                                        </span>
+                                        {/* Dots sub-paso */}
+                                        <div style={{ display: 'flex', gap: 4 }}>
+                                            {[1, 2].map(s => (
+                                                <span key={s} style={{
+                                                    width: 7, height: 7, borderRadius: '50%',
+                                                    backgroundColor: s === step.sub ? (allDone ? '#299D91' : meta.color) : '#DDE3E6',
+                                                    transition: 'background-color 0.2s',
+                                                }} />
+                                            ))}
+                                        </div>
+                                        {allDone && (
+                                            <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 700, color: '#299D91' }}>
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#299D91" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                                                Sub-paso completado
+                                            </span>
+                                        )}
+                                    </div>
+                                    <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: '#191919' }}>
+                                        {step.label}
+                                    </p>
+                                    <p style={{ margin: '2px 0 0', fontSize: 11, color: '#71717A' }}>
+                                        {step.desc}
+                                    </p>
+                                </div>
+                                {/* Navegación anterior / siguiente */}
+                                <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
+                                    <button
+                                        onClick={() => { setWorkflowSubStepIdx(i => Math.max(0, i - 1)); setPage(1); }}
+                                        disabled={workflowSubStepIdx === 0}
+                                        title="Sub-paso anterior"
+                                        style={{
+                                            display: 'flex', alignItems: 'center', gap: 4,
+                                            padding: '5px 10px', borderRadius: 8,
+                                            border: '1.5px solid #DDE3E6', backgroundColor: '#FFFFFF',
+                                            color: '#525256', fontSize: 12, fontWeight: 600,
+                                            cursor: workflowSubStepIdx === 0 ? 'not-allowed' : 'pointer',
+                                            opacity: workflowSubStepIdx === 0 ? 0.35 : 1,
+                                            transition: 'all 0.15s',
+                                        }}
+                                        onMouseEnter={e => { if (workflowSubStepIdx > 0) e.currentTarget.style.borderColor = '#9F9F9F'; }}
+                                        onMouseLeave={e => { e.currentTarget.style.borderColor = '#DDE3E6'; }}
+                                    >
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                                        Anterior
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            if (isLast) {
+                                                // Finalizar: marcar último paso como completo y salir del flujo
+                                                const newSet = new Set([...completedPasos, step.paso]);
+                                                updateCompletedPasos(activeClasificacion, [...newSet]);
+                                                exitWorkflowMode(true); // <- activar filtros balanceado + validado
+                                            } else {
+                                                // Avanzar: marcar el paso actual como completo si terminamos sus 2 sub-pasos
+                                                if (isLastSubInPaso) {
+                                                    const newSet = new Set([...completedPasos, step.paso]);
+                                                    updateCompletedPasos(activeClasificacion, [...newSet]);
+                                                }
+                                                setWorkflowSubStepIdx(i => i + 1);
+                                                setPage(1);
+                                            }
+                                        }}
+                                        title={isLast ? 'Finalizar flujo de validación' : 'Avanzar al siguiente sub-paso'}
+                                        style={{
+                                            display: 'flex', alignItems: 'center', gap: 4,
+                                            padding: '5px 10px', borderRadius: 8,
+                                            border: `1.5px solid ${isLast ? '#299D91' : allDone ? '#299D91' : '#DDE3E6'}`,
+                                            backgroundColor: isLast ? '#299D91' : allDone ? '#299D91' : '#FFFFFF',
+                                            color: isLast || allDone ? '#FFFFFF' : '#525256',
+                                            fontSize: 12, fontWeight: 600,
+                                            cursor: 'pointer',
+                                            transition: 'all 0.15s',
+                                        }}
+                                        onMouseEnter={e => { e.currentTarget.style.opacity = '0.85'; }}
+                                        onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}
+                                    >
+                                        {isLast ? 'Finalizar' : allDone ? '¡Siguiente!' : 'Siguiente'}
+                                        {isLast
+                                            ? <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                                            : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                                        }
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Barra de progreso del sub-paso */}
+                            <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <div style={{ flex: 1, height: 5, borderRadius: 99, backgroundColor: '#E5E7EB', overflow: 'hidden' }}>
+                                    <div style={{
+                                        height: '100%', borderRadius: 99,
+                                        width: `${pct}%`,
+                                        backgroundColor: allDone ? '#299D91' : meta.color,
+                                        transition: 'width 0.3s ease, background-color 0.2s',
+                                    }} />
+                                </div>
+                                <span style={{ fontSize: 11, fontWeight: 700, color: allDone ? '#299D91' : meta.color, flexShrink: 0 }}>
+                                    {revisados}/{total}
+                                    {validados > 0 && <span style={{ color: '#299D91', marginLeft: 4 }}>✓{validados}</span>}
+                                    {rechazados > 0 && <span style={{ color: '#D94A38', marginLeft: 4 }}>✗{rechazados}</span>}
+                                </span>
+                            </div>
+                        </div>
+                    );
+                })()}
+
                 {/* ── Toolbar ── */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: `8px ${PX}px`, ...borderBottom }}>
                     {/* Filtrar — dropdown unificado con secciones Estado y Variación */}
                     <div style={{ position: 'relative' }}>
                         <button
                             onClick={() => setShowFilterMenu(v => !v)}
-                            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: `1px solid ${(filterEstadoIdx || filterVariacion || filterRevision) ? '#299D91' : '#E8E8E8'}`, color: (filterEstadoIdx || filterVariacion || filterRevision) ? '#299D91' : '#525256', backgroundColor: (filterEstadoIdx || filterVariacion || filterRevision) ? '#EBF7F6' : '#FAFAFA', transition: 'all 0.15s' }}
+                            style={{
+                                display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px',
+                                borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                                border: `1px solid ${filterRevision || (!workflowMode && (filterEstadoIdx || filterVariacion)) ? '#299D91' : '#E8E8E8'}`,
+                                color:  filterRevision || (!workflowMode && (filterEstadoIdx || filterVariacion)) ? '#299D91' : '#525256',
+                                backgroundColor: filterRevision || (!workflowMode && (filterEstadoIdx || filterVariacion)) ? '#EBF7F6' : '#FAFAFA',
+                                transition: 'all 0.15s',
+                            }}
                         >
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                 <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
                             </svg>
                             {(() => {
                                 const parts = [];
-                                if (filterEstadoIdx) parts.push(`Estado ${filterEstadoIdx}`);
-                                if (filterVariacion) parts.push(`${filterVariacion} var.`);
+                                if (!workflowMode && filterEstadoIdx) parts.push(`Estado ${filterEstadoIdx}`);
+                                if (!workflowMode && filterVariacion)  parts.push(`${filterVariacion} var.`);
                                 if (filterRevision) parts.push(filterRevision);
                                 return parts.length > 0 ? parts.join(' · ') : 'Filtrar';
                             })()}
                         </button>
 
                         {showFilterMenu && (
-                            <div style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, zIndex: 50, backgroundColor: '#FFFFFF', borderRadius: 14, border: '1px solid #DDE3E6', boxShadow: '0 12px 24px -4px rgba(0,0,0,0.12), 0 4px 8px -2px rgba(0,0,0,0.06)', padding: '16px 18px 14px', minWidth: 460 }}>
-                                {/* Tres columnas en horizontal */}
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0 24px' }}>
-                                    {/* Columna Estado */}
-                                    <div>
-                                        <p style={{ margin: '0 0 8px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#9F9F9F' }}>Estado</p>
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                            {[null, 1, 2, 3].map(val => {
-                                                const active = filterEstadoIdx === val;
-                                                const chipColors = { 1: { bg: '#EBF7F6', color: '#299D91', activeBg: '#299D91' }, 2: { bg: '#FFF7ED', color: '#D97706', activeBg: '#F0A050' }, 3: { bg: '#FFF0EE', color: '#D94A38', activeBg: '#D94A38' } };
-                                                const cc = val ? chipColors[val] : null;
-                                                return (
-                                                    <button key={val ?? 'est-all'} onClick={() => { setFilterEstadoIdx(val); setPage(1); }}
-                                                        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderRadius: 8, fontSize: 12, fontWeight: active ? 700 : 500, cursor: 'pointer', border: `1px solid ${active && cc ? cc.activeBg : active ? '#299D91' : '#E8E8E8'}`, backgroundColor: active ? (cc ? cc.activeBg : '#299D91') : '#FAFAFA', color: active ? '#FFFFFF' : (cc ? cc.color : '#525256'), transition: 'all 0.12s', textAlign: 'left', width: '100%' }}
-                                                        onMouseEnter={e => { if (!active) { e.currentTarget.style.backgroundColor = cc ? cc.bg : '#F0F9FF'; e.currentTarget.style.borderColor = cc ? cc.activeBg : '#299D91'; } }}
-                                                        onMouseLeave={e => { if (!active) { e.currentTarget.style.backgroundColor = '#FAFAFA'; e.currentTarget.style.borderColor = '#E8E8E8'; } }}
-                                                    >
-                                                        {val === null ? 'Todos' : `Estado ${val}`}
-                                                    </button>
-                                                );
-                                            })}
+                            <div style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, zIndex: 50, backgroundColor: '#FFFFFF', borderRadius: 14, border: '1px solid #DDE3E6', boxShadow: '0 12px 24px -4px rgba(0,0,0,0.12), 0 4px 8px -2px rgba(0,0,0,0.06)', padding: '16px 18px 14px', minWidth: workflowMode ? 220 : 460 }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: workflowMode ? '1fr' : '1fr 1fr 1fr', gap: '0 24px' }}>
+
+                                    {/* Columna Estado — bloqueada en modo guiado */}
+                                    {!workflowMode && (
+                                        <div>
+                                            <p style={{ margin: '0 0 8px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#9F9F9F' }}>Estado</p>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                                {[null, 1, 2, 3].map(val => {
+                                                    const active = filterEstadoIdx === val;
+                                                    const chipColors = { 1: { bg: '#EBF7F6', color: '#299D91', activeBg: '#299D91' }, 2: { bg: '#FFF7ED', color: '#D97706', activeBg: '#F0A050' }, 3: { bg: '#FFF0EE', color: '#D94A38', activeBg: '#D94A38' } };
+                                                    const cc = val ? chipColors[val] : null;
+                                                    return (
+                                                        <button key={val ?? 'est-all'} onClick={() => { setFilterEstadoIdx(val); setPage(1); }}
+                                                            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderRadius: 8, fontSize: 12, fontWeight: active ? 700 : 500, cursor: 'pointer', border: `1px solid ${active && cc ? cc.activeBg : active ? '#299D91' : '#E8E8E8'}`, backgroundColor: active ? (cc ? cc.activeBg : '#299D91') : '#FAFAFA', color: active ? '#FFFFFF' : (cc ? cc.color : '#525256'), transition: 'all 0.12s', textAlign: 'left', width: '100%' }}
+                                                            onMouseEnter={e => { if (!active) { e.currentTarget.style.backgroundColor = cc ? cc.bg : '#F0F9FF'; e.currentTarget.style.borderColor = cc ? cc.activeBg : '#299D91'; } }}
+                                                            onMouseLeave={e => { if (!active) { e.currentTarget.style.backgroundColor = '#FAFAFA'; e.currentTarget.style.borderColor = '#E8E8E8'; } }}
+                                                        >
+                                                            {val === null ? 'Todos' : `Estado ${val}`}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
                                         </div>
-                                    </div>
-                                    {/* Columna Variación */}
-                                    <div>
-                                        <p style={{ margin: '0 0 8px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#9F9F9F' }}>Variación</p>
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                            {[null, 'Baja', 'Alta'].map(val => {
-                                                const active = filterVariacion === val;
-                                                const varColors = { 'Baja': { bg: '#EBF7F6', color: '#299D91', activeBg: '#299D91' }, 'Alta': { bg: '#FFF0EE', color: '#D94A38', activeBg: '#D94A38' } };
-                                                const cc = val ? varColors[val] : null;
-                                                return (
-                                                    <button key={val ?? 'var-all'} onClick={() => { setFilterVariacion(val); setPage(1); }}
-                                                        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderRadius: 8, fontSize: 12, fontWeight: active ? 700 : 500, cursor: 'pointer', border: `1px solid ${active && cc ? cc.activeBg : active ? '#299D91' : '#E8E8E8'}`, backgroundColor: active ? (cc ? cc.activeBg : '#299D91') : '#FAFAFA', color: active ? '#FFFFFF' : (cc ? cc.color : '#525256'), transition: 'all 0.12s', textAlign: 'left', width: '100%' }}
-                                                        onMouseEnter={e => { if (!active) { e.currentTarget.style.backgroundColor = cc ? cc.bg : '#F0F9FF'; e.currentTarget.style.borderColor = cc ? cc.activeBg : '#299D91'; } }}
-                                                        onMouseLeave={e => { if (!active) { e.currentTarget.style.backgroundColor = '#FAFAFA'; e.currentTarget.style.borderColor = '#E8E8E8'; } }}
-                                                    >
-                                                        {val === null ? 'Todas' : val}
-                                                    </button>
-                                                );
-                                            })}
+                                    )}
+
+                                    {/* Columna Variación — bloqueada en modo guiado */}
+                                    {!workflowMode && (
+                                        <div>
+                                            <p style={{ margin: '0 0 8px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#9F9F9F' }}>Variación</p>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                                {[null, 'Baja', 'Alta'].map(val => {
+                                                    const active = filterVariacion === val;
+                                                    const varColors = { 'Baja': { bg: '#EBF7F6', color: '#299D91', activeBg: '#299D91' }, 'Alta': { bg: '#FFF0EE', color: '#D94A38', activeBg: '#D94A38' } };
+                                                    const cc = val ? varColors[val] : null;
+                                                    return (
+                                                        <button key={val ?? 'var-all'} onClick={() => { setFilterVariacion(val); setPage(1); }}
+                                                            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderRadius: 8, fontSize: 12, fontWeight: active ? 700 : 500, cursor: 'pointer', border: `1px solid ${active && cc ? cc.activeBg : active ? '#299D91' : '#E8E8E8'}`, backgroundColor: active ? (cc ? cc.activeBg : '#299D91') : '#FAFAFA', color: active ? '#FFFFFF' : (cc ? cc.color : '#525256'), transition: 'all 0.12s', textAlign: 'left', width: '100%' }}
+                                                            onMouseEnter={e => { if (!active) { e.currentTarget.style.backgroundColor = cc ? cc.bg : '#F0F9FF'; e.currentTarget.style.borderColor = cc ? cc.activeBg : '#299D91'; } }}
+                                                            onMouseLeave={e => { if (!active) { e.currentTarget.style.backgroundColor = '#FAFAFA'; e.currentTarget.style.borderColor = '#E8E8E8'; } }}
+                                                        >
+                                                            {val === null ? 'Todas' : val}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
                                         </div>
-                                    </div>
-                                    {/* Columna Revisión */}
+                                    )}
+
+                                    {/* Columna Revisión — siempre disponible */}
                                     <div>
                                         <p style={{ margin: '0 0 8px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#9F9F9F' }}>Revisión</p>
+                                        {workflowMode && (
+                                            <p style={{ margin: '0 0 8px', fontSize: 10, color: '#B0B0B0' }}>Estado y Variación son gestionados por el flujo guiado.</p>
+                                        )}
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                                             {[null, 'Validado', 'Rechazado', 'Sin revisar'].map(val => {
                                                 const active = filterRevision === val;
@@ -723,10 +1097,10 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                                     </div>
                                 </div>
                                 {/* Footer: limpiar filtros */}
-                                {(filterEstadoIdx || filterVariacion || filterRevision) && (
+                                {((!workflowMode && (filterEstadoIdx || filterVariacion)) || filterRevision) && (
                                     <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #F0F0F0', display: 'flex', justifyContent: 'flex-end' }}>
                                         <button
-                                            onClick={() => { setFilterEstadoIdx(null); setFilterVariacion(null); setFilterRevision(null); setShowFilterMenu(false); setPage(1); }}
+                                            onClick={() => { if (!workflowMode) { setFilterEstadoIdx(null); setFilterVariacion(null); } setFilterRevision(null); setShowFilterMenu(false); setPage(1); }}
                                             style={{ padding: '6px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, color: '#D94A38', backgroundColor: 'transparent', border: '1px solid #D94A38', cursor: 'pointer', transition: 'all 0.12s' }}
                                             onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#FFF0EE'; }}
                                             onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; }}

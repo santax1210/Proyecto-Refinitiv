@@ -34,6 +34,24 @@ def extraer_nombre_region(pct_str):
     return valor
 
 
+def _extraer_region_antigua_con_umbral(pct_str, umbral=90.0):
+    """
+    Extrae region_antigua aplicando el mismo umbral de dominancia que se usa
+    en las nuevas (90% por defecto). Si el porcentaje del region max es menor
+    al umbral, retorna 'Balanceado' — igual que _calcular_dominancia_region
+    hace con pct_escalado >= 0.9 para las nuevas.
+    """
+    nombre = extraer_nombre_region(pct_str)
+    if nombre in ('Sin datos', ''):
+        return nombre
+    match = re.search(r'(\d+\.?\d*)\s*%$', str(pct_str).strip())
+    if match:
+        pct = float(match.group(1))
+        if pct < umbral:
+            return 'Balanceado'
+    return nombre
+
+
 # ============================================================================
 # HELLINGER Y MÉTRICAS DE VARIACIÓN (adaptadas para regiones)
 # ============================================================================
@@ -173,7 +191,7 @@ def calcular_variacion_balanceados_region(row, df_dominancia_antiguas, df_domina
         return calcular_hellinger_por_instrumento_region(row, df_dominancia_antiguas, df_dominancia_nuevas)
     elif estado == 'Estado_2':
         pct_antiguo = extraer_porcentaje_dominante_region(row, 'pct_dominancia_antigua')
-        region_antigua = extraer_nombre_region(row.get('pct_dominancia_antigua', ''))
+        region_antigua = _extraer_region_antigua_con_umbral(row.get('pct_dominancia_antigua', ''))
         if pct_antiguo is not None and region_antigua not in ('Sin datos', '') and 'ID' in row:
             pct_misma = obtener_pct_region_en_nuevas(df_dominancia_nuevas, row['ID'], region_antigua)
             if pct_misma is None:
@@ -191,7 +209,7 @@ def calcular_variacion_no_balanceados_region(row, df_dominancia_nuevas):
         return None
 
     pct_antiguo = extraer_porcentaje_dominante_region(row, 'pct_dominancia_antigua')
-    region_antigua = extraer_nombre_region(row.get('pct_dominancia_antigua', ''))
+    region_antigua = _extraer_region_antigua_con_umbral(row.get('pct_dominancia_antigua', ''))
     if pct_antiguo is None or region_antigua in ('Sin datos', ''):
         return None
 
@@ -323,8 +341,10 @@ def crear_df_final_region(df_instruments, df_dominancia_nuevas_region, df_domina
     if 'Pct_dominancia' in df_final.columns:
         df_final.rename(columns={'Pct_dominancia': 'pct_dominancia_antigua'}, inplace=True)
 
-    # 4. Derivar region_antigua desde pct_dominancia_antigua
-    df_final['region_antigua'] = df_final['pct_dominancia_antigua'].apply(extraer_nombre_region)
+    # 4. Derivar region_antigua desde pct_dominancia_antigua aplicando umbral de dominancia (90%)
+    # Esto es equivalente a lo que hace _calcular_dominancia_region para las nuevas:
+    # si la región máxima no supera el 90%, el instrumento se considera Balanceado en antiguas también.
+    df_final['region_antigua'] = df_final['pct_dominancia_antigua'].apply(_extraer_region_antigua_con_umbral)
 
     # 5. Columna Cambio
     df_final['Cambio'] = df_final.apply(detectar_cambio_region, axis=1)

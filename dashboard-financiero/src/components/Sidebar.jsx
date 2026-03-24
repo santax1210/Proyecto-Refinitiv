@@ -1,4 +1,5 @@
 
+import { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 
 // ─── Inline SVG Icons ───────────────────────────────────────────────────────
@@ -47,11 +48,30 @@ const TEXT_ON = '#FFFFFF';      // texto activo / hover
 const HOVER_BG = 'rgba(255,255,255,0.06)';
 
 const CLASIF_LABELS = { moneda: 'Moneda', region: 'Región', sector: 'Industria' };
+const CLASIF_OPCIONES = [
+    { key: 'moneda',  label: 'Moneda' },
+    { key: 'region',  label: 'Región' },
+    { key: 'sector',  label: 'Industria' },
+];
 
 // ─── Sidebar Component ───────────────────────────────────────────────────────
 export default function Sidebar({ activePage = 'inicio', onNavigate, onLogout }) {
-    const { activeClasificacion } = useApp();
+    const { activeClasificacion, setActiveClasificacion, validationDataMap } = useApp();
     const clasifLabel = CLASIF_LABELS[activeClasificacion] || null;
+    const [dropdownOpen, setDropdownOpen] = useState(false);
+    const dropdownRef = useRef(null);
+
+    useEffect(() => {
+        if (!dropdownOpen) return;
+        const handler = (e) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+                setDropdownOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [dropdownOpen]);
+
     return (
         <aside style={{
             display: 'flex', flexDirection: 'column',
@@ -65,31 +85,78 @@ export default function Sidebar({ activePage = 'inicio', onNavigate, onLogout })
                 <span style={{ fontSize: 17, letterSpacing: '-0.3px', color: TEXT_ON, fontWeight: 800 }}>
                     Refinitiv <span style={{ color: TEAL }}>Automation</span>
                 </span>
-                {/* Clasificación activa */}
-                <div style={{ marginTop: 10, minHeight: 22 }}>
-                    {clasifLabel ? (
-                        <div style={{
+                {/* Clasificación activa — selector dropdown */}
+                <div style={{ marginTop: 10, position: 'relative' }} ref={dropdownRef}>
+                    <button
+                        onClick={() => setDropdownOpen(o => !o)}
+                        title="Cambiar vista de clasificación"
+                        style={{
                             display: 'inline-flex', alignItems: 'center', gap: 6,
-                            padding: '3px 9px', borderRadius: 20,
-                            backgroundColor: 'rgba(41,157,145,0.15)',
-                            border: '1px solid rgba(41,157,145,0.30)',
-                        }}>
-                            <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: TEAL, flexShrink: 0 }} />
-                            <span style={{ fontSize: 11, fontWeight: 700, color: TEAL, letterSpacing: '0.04em' }}>
-                                {clasifLabel}
-                            </span>
-                        </div>
-                    ) : (
+                            padding: '3px 9px 3px 9px', borderRadius: 20,
+                            backgroundColor: clasifLabel ? 'rgba(41,157,145,0.15)' : 'rgba(255,255,255,0.05)',
+                            border: `1px solid ${clasifLabel ? 'rgba(41,157,145,0.30)' : 'rgba(255,255,255,0.08)'}`,
+                            cursor: 'pointer',
+                            transition: 'opacity 0.15s',
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.opacity = '0.8'; }}
+                        onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}
+                    >
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: clasifLabel ? TEAL : TEXT_DIM, flexShrink: 0 }} />
+                        <span style={{ fontSize: 11, fontWeight: clasifLabel ? 700 : 500, color: clasifLabel ? TEAL : TEXT_DIM, letterSpacing: '0.04em' }}>
+                            {clasifLabel || 'Sin clasificación'}
+                        </span>
+                        {/* chevron */}
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={clasifLabel ? TEAL : TEXT_DIM} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                            style={{ transition: 'transform 0.15s', transform: dropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)', marginLeft: 1 }}>
+                            <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                    </button>
+
+                    {/* Dropdown menu */}
+                    {dropdownOpen && (
                         <div style={{
-                            display: 'inline-flex', alignItems: 'center', gap: 6,
-                            padding: '3px 9px', borderRadius: 20,
-                            backgroundColor: 'rgba(255,255,255,0.05)',
-                            border: '1px solid rgba(255,255,255,0.08)',
+                            position: 'absolute', top: 'calc(100% + 6px)', left: 0,
+                            backgroundColor: '#222426', border: '1px solid rgba(255,255,255,0.1)',
+                            borderRadius: 10, overflow: 'hidden',
+                            boxShadow: '0 6px 20px rgba(0,0,0,0.4)',
+                            zIndex: 1000, minWidth: 130,
                         }}>
-                            <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: TEXT_DIM, flexShrink: 0 }} />
-                            <span style={{ fontSize: 11, fontWeight: 500, color: TEXT_DIM, letterSpacing: '0.04em' }}>
-                                Sin clasificación
-                            </span>
+                            {CLASIF_OPCIONES.map(({ key, label }) => {
+                                const isActive = activeClasificacion === key;
+                                const hasData = !!(validationDataMap && validationDataMap[key]);
+                                return (
+                                    <button
+                                        key={key}
+                                        onClick={() => {
+                                            if (hasData || isActive) {
+                                                setActiveClasificacion(key);
+                                                setDropdownOpen(false);
+                                            }
+                                        }}
+                                        title={!hasData && !isActive ? `Sin datos para ${label}` : undefined}
+                                        style={{
+                                            display: 'flex', alignItems: 'center', gap: 8,
+                                            width: '100%', padding: '9px 14px',
+                                            border: 'none', textAlign: 'left',
+                                            backgroundColor: isActive ? 'rgba(41,157,145,0.2)' : 'transparent',
+                                            color: isActive ? TEAL : hasData ? TEXT_ON : 'rgba(138,143,152,0.4)',
+                                            fontSize: 13, fontWeight: isActive ? 700 : 400,
+                                            cursor: hasData && !isActive ? 'pointer' : isActive ? 'default' : 'not-allowed',
+                                            transition: 'background-color 0.12s',
+                                        }}
+                                        onMouseEnter={e => { if (hasData && !isActive) e.currentTarget.style.backgroundColor = HOVER_BG; }}
+                                        onMouseLeave={e => { if (hasData && !isActive) e.currentTarget.style.backgroundColor = 'transparent'; }}
+                                    >
+                                        <span style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, backgroundColor: isActive ? TEAL : hasData ? TEXT_DIM : 'rgba(138,143,152,0.25)' }} />
+                                        {label}
+                                        {isActive && (
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={TEAL} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 'auto' }}>
+                                                <polyline points="20 6 9 17 4 12" />
+                                            </svg>
+                                        )}
+                                    </button>
+                                );
+                            })}
                         </div>
                     )}
                 </div>

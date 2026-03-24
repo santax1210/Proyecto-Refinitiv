@@ -39,6 +39,23 @@ export function AppProvider({ children }) {
         try { return localStorage.getItem('allocations_active_clasif') || ''; } catch { return ''; }
     });
 
+    // Pasos del flujo de validación completados (por clasificación)
+    // Persiste en memoria durante la sesión — no se pierde al navegar
+    const [completedPasosMap, setCompletedPasosMap] = useState(() => {
+        try {
+            const saved = localStorage.getItem('allocations_completed_pasos_map');
+            return saved ? JSON.parse(saved) : { moneda: [], region: [], sector: [] };
+        } catch { return { moneda: [], region: [], sector: [] }; }
+    });
+
+    const updateCompletedPasos = useCallback((clasifKey, pasosArray) => {
+        setCompletedPasosMap(prev => {
+            const next = { ...prev, [clasifKey]: pasosArray };
+            try { localStorage.setItem('allocations_completed_pasos_map', JSON.stringify(next)); } catch { /* ignorar */ }
+            return next;
+        });
+    }, []);
+
     const setActiveClasificacion = useCallback((key) => {
         _setActiveClasificacion(key);
         try { localStorage.setItem('allocations_active_clasif', key); } catch { /* ignorar */ }
@@ -62,6 +79,13 @@ export function AppProvider({ children }) {
             // Limpiar solo los datos de ESTA clasificación
             try { localStorage.removeItem(`allocations_revisiones_${clasifKey}`); } catch { /* ignorar */ }
             try { localStorage.removeItem(`allocations_filtros_${clasifKey}`); } catch { /* ignorar */ }
+
+            // Limpiar el progreso del flujo de validación para esta clasificación
+            setCompletedPasosMap(prev => {
+                const next = { ...prev, [clasifKey]: [] };
+                try { localStorage.setItem('allocations_completed_pasos_map', JSON.stringify(next)); } catch { /* ignorar */ }
+                return next;
+            });
 
             // Actualizar estado a uploading
             setProcessingState({
@@ -202,6 +226,9 @@ export function AppProvider({ children }) {
         setActiveClasificacion,
         clasificacion,
         setClasificacion,
+        // Progreso del flujo de validación
+        completedPasosMap,
+        updateCompletedPasos,
         // Acciones
         uploadAndProcess,
         loadValidationResults,

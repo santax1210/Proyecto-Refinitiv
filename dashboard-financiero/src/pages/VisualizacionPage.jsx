@@ -127,6 +127,7 @@ function MetricCard({ label, value, sub, accent = TEAL, icon, tooltip }) {
 ══════════════════════════════════════════════ */
 function BarChart({ breakdownAntigua, breakdownNueva, label }) {
     const [tipBar, setTipBar] = useState(null);
+    // Unir clases y ordenar por valor descendente (suma de antigua+nueva)
     const allClases = [...new Set([
         ...breakdownAntigua.map(d => d.clase),
         ...breakdownNueva.map(d => d.clase),
@@ -136,12 +137,13 @@ function BarChart({ breakdownAntigua, breakdownNueva, label }) {
         return <p style={{ color: '#9F9F9F', fontSize: 12, textAlign: 'center', padding: '20px 0' }}>Sin datos de composición</p>;
     }
 
+    // Ordenar por valor descendente (antigua+nueva)
     const barData = allClases.map(c => ({
         clase: c,
         antigua: breakdownAntigua.find(x => x.clase === c)?.pct ?? 0,
         nueva: breakdownNueva.find(x => x.clase === c)?.pct ?? 0,
         color: getColor(c),
-    }));
+    })).sort((a, b) => (b.antigua + b.nueva) - (a.antigua + a.nueva));
 
     const maxVal = Math.max(...barData.flatMap(d => [Math.abs(d.antigua), Math.abs(d.nueva)]), 1);
     const chartH = 100;
@@ -151,6 +153,11 @@ function BarChart({ breakdownAntigua, breakdownNueva, label }) {
     const MIN_SLOTS = 5; // siempre reservar al menos 5 grupos para mantener proporciones
     const slots = Math.max(barData.length, MIN_SLOTS);
     const totalW = slots * groupW;
+
+    // Helper para truncar nombres largos
+    function truncateLabel(label, maxLen = 12) {
+        return label.length > maxLen ? label.slice(0, maxLen - 2) + '…' : label;
+    }
 
     return (
         <div style={{ width: '100%', overflowX: 'auto' }}>
@@ -169,6 +176,8 @@ function BarChart({ breakdownAntigua, breakdownNueva, label }) {
                     const x = 36 + i * groupW;
                     const hA = (Math.abs(d.antigua) / maxVal) * chartH;
                     const hN = (Math.abs(d.nueva) / maxVal) * chartH;
+                    // Etiqueta truncada y tooltip
+                    const labelShort = truncateLabel(d.clase);
                     return (
                         <g key={d.clase}>
                             <rect x={x} y={chartH - hA + 20} width={barW} height={Math.max(hA, 1)} rx="3" fill={TEAL}
@@ -185,8 +194,22 @@ function BarChart({ breakdownAntigua, breakdownNueva, label }) {
                                 style={{ animation: 'fadeInLegend 0.35s ease both', animationDelay: `${i * 0.07 + 0.3}s` }}>{d.antigua > 0 ? `${d.antigua}%` : ''}</text>
                             <text x={x + barW + gap + barW / 2} y={Math.min(chartH - hN + 15, chartH + 15)} textAnchor="middle" fontSize="7" fill={PURPLE} fontWeight="700"
                                 style={{ animation: 'fadeInLegend 0.35s ease both', animationDelay: `${i * 0.07 + 0.335}s` }}>{d.nueva > 0 ? `${d.nueva}%` : ''}</text>
-                            <text x={x + barW + gap / 2} y={chartH + 34} textAnchor="middle" fontSize="9" fontWeight="600" fill="#525256"
-                                style={{ animation: 'fadeInLegend 0.35s ease both', animationDelay: `${i * 0.07 + 0.25}s` }}>{d.clase}</text>
+                            {/* Etiqueta rotada, truncada y con tooltip */}
+                            <g>
+                                <title>{d.clase}</title>
+                                <text
+                                    x={x + barW + gap / 2}
+                                    y={chartH + 44}
+                                    textAnchor="end"
+                                    fontSize="9"
+                                    fontWeight="600"
+                                    fill="#525256"
+                                    transform={`rotate(-35 ${x + barW + gap / 2},${chartH + 44})`}
+                                    style={{ cursor: d.clase.length > 12 ? 'help' : 'default', animation: 'fadeInLegend 0.35s ease both', animationDelay: `${i * 0.07 + 0.25}s` }}
+                                >
+                                    {labelShort}
+                                </text>
+                            </g>
                         </g>
                     );
                 })}
