@@ -335,12 +335,32 @@ def crear_df_final_sector(df_instruments, df_dominancia_nuevas_sector, df_domina
 
     df_final['nivel_variacion'] = df_final.apply(calcular_nivel_variacion_sector, axis=1)
 
+    # Alertas de dominancia
+    from src.logic.utils.alertas_dominancia import calcular_alerta_dominancia, COLS_META_SECTOR
+    print('  [INFO] Calculando alertas de dominancia (sector)...')
+    df_final['alerta_dominancia'] = df_final.apply(
+        lambda row: calcular_alerta_dominancia(
+            row,
+            df_dominancia_nuevas_sector,
+            df_dominancia_antiguas_sector,
+            col_pct_antigua='pct_dominancia_antigua',
+            col_pct_nueva='pct_dominancia_nueva',
+            col_clase_nuevas='class',
+            col_pct_nuevas='percentage',
+            cols_meta_antiguas=COLS_META_SECTOR,
+        ),
+        axis=1
+    )
+    n_alertas = df_final['alerta_dominancia'].notna().sum()
+    print(f'  [OK] Alertas detectadas: {n_alertas} instrumentos')
+
     cols_orden = [
         'Nombre', 'ID', 'Tipo instrumento',
         'sector_antigua', 'sector_nueva',
         'pct_dominancia_nueva', 'pct_escalado', 'pct_original',
         'pct_dominancia_antigua', 'Cambio', 'Estado', 'nivel_variacion',
         'distancia_hellinger', 'variacion_balanceados', 'variacion_no_balanceados',
+        'alerta_dominancia',
     ]
     cols_finales = [c for c in cols_orden if c in df_final.columns]
     return df_final[cols_finales]

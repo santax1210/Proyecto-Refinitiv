@@ -543,12 +543,35 @@ def crear_df_final(df_instruments, df_dominancia_nuevas, df_dominancia_antiguas)
     # Sin datos: None
     df_final['nivel_variacion'] = df_final.apply(calcular_nivel_variacion, axis=1)
 
-    # 10. Reordenar columnas para presentación
+    # 10. CALCULAR ALERTA DE DOMINANCIA
+    # Detecta dos escenarios anómalos comparando la distribución COMPLETA:
+    # - 'DESAPARECE': la clase dominante antigua ya no aparece en la nueva distribución
+    # - 'NUEVA': la clase dominante nueva nunca existió en la distribución antigua
+    from src.logic.utils.alertas_dominancia import calcular_alerta_dominancia, COLS_META_MONEDA
+    print("  [INFO] Calculando alertas de dominancia...")
+    df_final['alerta_dominancia'] = df_final.apply(
+        lambda row: calcular_alerta_dominancia(
+            row,
+            df_dominancia_nuevas,
+            df_dominancia_antiguas,
+            col_pct_antigua='pct_dominancia_antigua',
+            col_pct_nueva='pct_dominancia_nuevo',
+            col_clase_nuevas='class',
+            col_pct_nuevas='percentage',
+            cols_meta_antiguas=COLS_META_MONEDA,
+        ),
+        axis=1
+    )
+    n_alertas = df_final['alerta_dominancia'].notna().sum()
+    print(f"  [OK] Alertas detectadas: {n_alertas} instrumentos")
+
+    # 11. Reordenar columnas para presentación
     cols_orden = [
         'Nombre', 'ID', 'Tipo instrumento', 'moneda_antigua',
         'moneda_nueva', 'pct_dominancia_nuevo', 'pct_escalado', 'pct_original',
         'pct_dominancia_antigua', 'Cambio', 'Estado', 'nivel_variacion',
-        'distancia_hellinger', 'variacion_balanceados', 'variacion_no_balanceados'
+        'distancia_hellinger', 'variacion_balanceados', 'variacion_no_balanceados',
+        'alerta_dominancia',
     ]
     
     # Seleccionar solo las que existen
