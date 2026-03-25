@@ -104,6 +104,12 @@ const WORKFLOW_STEPS = [
         label: 'Hedged',
         desc: 'Instrumentos con etiquetas de hedge en el nombre (HEDGE, HEDGED, HDG, etc.). Agrupar para revisión específica.'
     },
+    // Paso 5 · Subpaso PCT Original anómalo: valores fuera del rango [60, 120]
+    {
+        paso: 5, sub: 3, tab: 'Todos', estadoIdx: null, variacion: null, pctOriginalAnomaly: true,
+        label: 'PCT Original Anómalo',
+        desc: 'Instrumentos con PCT Original fuera del rango normal (< 60 o > 120). Revisar posibles inconsistencias en los datos de distribución.'
+    },
 ];
 
 const PASO_META = [
@@ -121,6 +127,16 @@ function isInstrumentHedged(nombre) {
     if (!nombre) return false;
     const up = String(nombre).toUpperCase();
     return HEDGED_PATTERNS.some(pat => up.includes(pat));
+}
+
+/**
+ * Detecta anomalías en PCT Original: valores estrictamente < 60 o > 120.
+ * Encapsula la regla de negocio para facilitar mantenimiento y reutilización.
+ */
+function isPctOriginalAnomaly(pctOriginal) {
+    if (pctOriginal == null || isNaN(pctOriginal)) return false;
+    const val = parseFloat(pctOriginal);
+    return val < 60 || val > 120;
 }
 
 const ESTADO_CFG = {
@@ -370,9 +386,19 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
     const wfStepCounts = useMemo(() => {
         const step = _wfStep;
         const rows = SAMPLE_DATA.filter(r => {
+            // Soporte para subpaso especial 'pctOriginalAnomaly' (tiene prioridad)
+            if (step.pctOriginalAnomaly) {
+                return isPctOriginalAnomaly(r.pct_original);
+            }
             // Soporte para subpaso especial 'hedged'
+            // Excluimos las anomalías PCT para que no aparezcan duplicadas aquí
             if (step.hedged) {
-                return isInstrumentHedged(r.Nombre);
+                return isInstrumentHedged(r.Nombre) && !isPctOriginalAnomaly(r.pct_original);
+            }
+            // Pasos regulares: excluir instrumentos que pertenecen a subpasos especiales
+            // para garantizar que sean únicos en su subpaso de revisión dedicado.
+            if (isInstrumentHedged(r.Nombre) || isPctOriginalAnomaly(r.pct_original)) {
+                return false;
             }
             const cn = r.moneda_nueva ?? r.region_nueva ?? r.sector_nueva;
             let mt = false;
@@ -424,9 +450,21 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
             const clasificacionNueva = r.moneda_nueva ?? r.region_nueva ?? r.sector_nueva;
             const clasificacionAntigua = r.moneda_antigua ?? r.region_antigua ?? r.sector_antigua;
 
+            // Si el paso actual es un subpaso 'pctOriginalAnomaly', filtrar por anomalía PCT Original (tiene prioridad)
+            if (workflowMode && _wfStep && _wfStep.pctOriginalAnomaly) {
+                return isPctOriginalAnomaly(r.pct_original);
+            }
+
             // Si el paso actual es un subpaso 'hedged', filtrar por nombre y omitir otros criterios
+            // Excluimos las anomalías PCT para que no aparezcan duplicadas aquí
             if (workflowMode && _wfStep && _wfStep.hedged) {
-                return isInstrumentHedged(r.Nombre);
+                return isInstrumentHedged(r.Nombre) && !isPctOriginalAnomaly(r.pct_original);
+            }
+
+            // En modo guiado, pasos regulares excluyen instrumentos "especiales" para que
+            // sean únicos en sus subpasos de revisión dedicados (Hedged y PCT Original Anómalo).
+            if (workflowMode && (isInstrumentHedged(r.Nombre) || isPctOriginalAnomaly(r.pct_original))) {
+                return false;
             }
 
             // Filtro por Tab (efectivo según modo)
@@ -470,7 +508,7 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
             const matchPctNue = !pctNuevoFilter || claseNueva === pctNuevoFilter;
 
             return matchTab && matchEstadoIdx && matchVariacion && matchRevision && matchSearch && matchPctAnt && matchPctNue;
-        }), [effTab, effEstadoIdx, effVariacion, filterRevision, revisiones, search, pctAntiguoFilter, pctNuevoFilter, SAMPLE_DATA]); // eslint-disable-line
+        }), [effTab, effEstadoIdx, effVariacion, filterRevision, revisiones, search, pctAntiguoFilter, pctNuevoFilter, SAMPLE_DATA, workflowSubStepIdx, workflowMode]); // eslint-disable-line
 
     // Aplicar ordenamiento por columna Variación sobre el conjunto filtrado
     // Usa los mismos campos que muestra la columna: variacion_balanceados ?? variacion_no_balanceados

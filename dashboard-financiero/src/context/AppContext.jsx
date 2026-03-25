@@ -79,6 +79,9 @@ export function AppProvider({ children }) {
             // Limpiar solo los datos de ESTA clasificación
             try { localStorage.removeItem(`allocations_revisiones_${clasifKey}`); } catch { /* ignorar */ }
             try { localStorage.removeItem(`allocations_filtros_${clasifKey}`); } catch { /* ignorar */ }
+            try { localStorage.removeItem(`allocations_selected_${clasifKey}`); } catch { /* ignorar */ }
+            try { localStorage.removeItem(`allocations_wf_mode_${clasifKey}`); } catch { /* ignorar */ }
+            try { localStorage.removeItem(`allocations_wf_step_${clasifKey}`); } catch { /* ignorar */ }
 
             // Limpiar el progreso del flujo de validación para esta clasificación
             setCompletedPasosMap(prev => {
