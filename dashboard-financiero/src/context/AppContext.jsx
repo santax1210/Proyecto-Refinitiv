@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import * as api from '../services/apiService';
 
 // Normaliza el valor de clasificación al key interno usado para almacenamiento
@@ -34,6 +34,7 @@ export function AppProvider({ children }) {
     const [validationDataMap, setValidationDataMap] = useState({ ...EMPTY_MAP });
     const [summaryMap, setSummaryMap] = useState({ ...EMPTY_MAP });
     const [clasificacion, setClasificacion] = useState('');
+    const [availableResults, setAvailableResults] = useState([]); // Array de keys ['moneda', 'region', 'sector']
     // Clasificación actualmente visualizada en ValidacionPage
     const [activeClasificacion, _setActiveClasificacion] = useState(() => {
         try { return localStorage.getItem('allocations_active_clasif') || ''; } catch { return ''; }
@@ -60,6 +61,22 @@ export function AppProvider({ children }) {
         _setActiveClasificacion(key);
         try { localStorage.setItem('allocations_active_clasif', key); } catch { /* ignorar */ }
     }, []);
+
+    const fetchAvailableResults = useCallback(async () => {
+        try {
+            const res = await api.getAvailableResults();
+            if (res.status === 'success') {
+                setAvailableResults(res.available || []);
+            }
+        } catch (error) {
+            console.error('Error al cargar resultados disponibles:', error);
+        }
+    }, []);
+
+    // Cargar resultados disponibles al montar la aplicación
+    useEffect(() => {
+        fetchAvailableResults();
+    }, [fetchAvailableResults]);
 
     // Valores computados para la clasificación activa
     const validationData = validationDataMap[activeClasificacion] ?? null;
@@ -132,6 +149,7 @@ export function AppProvider({ children }) {
             setValidationDataMap(prev => ({ ...prev, [clasifKey]: results.data }));
             setSummaryMap(prev => ({ ...prev, [clasifKey]: results.summary }));
             setActiveClasificacion(clasifKey);
+            await fetchAvailableResults(); // Actualizar lista de archivos en disco
 
             // Completado
             setProcessingState({
@@ -175,6 +193,7 @@ export function AppProvider({ children }) {
                 }
                 return prev;
             });
+            await fetchAvailableResults(); // Sincronizar disponibles
             return results;
         } catch (error) {
             console.error('Error al cargar resultados:', error);
@@ -197,6 +216,7 @@ export function AppProvider({ children }) {
             });
             setValidationDataMap({ ...EMPTY_MAP });
             setSummaryMap({ ...EMPTY_MAP });
+            setAvailableResults([]);
             _setActiveClasificacion('');
             try { localStorage.removeItem('allocations_active_clasif'); } catch { /* ignorar */ }
         } catch (error) {
@@ -226,6 +246,7 @@ export function AppProvider({ children }) {
         validationData,             // acceso directo a la clasificación activa
         summary,                    // acceso directo a la clasificación activa
         activeClasificacion,
+        availableResults,
         setActiveClasificacion,
         clasificacion,
         setClasificacion,
@@ -235,6 +256,7 @@ export function AppProvider({ children }) {
         // Acciones
         uploadAndProcess,
         loadValidationResults,
+        fetchAvailableResults,
         resetProcessing,
         checkApiHealth,
         // Setters directos (para casos especiales)

@@ -49,14 +49,14 @@ const HOVER_BG = 'rgba(255,255,255,0.06)';
 
 const CLASIF_LABELS = { moneda: 'Moneda', region: 'Región', sector: 'Industria' };
 const CLASIF_OPCIONES = [
-    { key: 'moneda',  label: 'Moneda' },
-    { key: 'region',  label: 'Región' },
-    { key: 'sector',  label: 'Industria' },
+    { key: 'moneda', label: 'Moneda' },
+    { key: 'region', label: 'Región' },
+    { key: 'sector', label: 'Industria' },
 ];
 
 // ─── Sidebar Component ───────────────────────────────────────────────────────
 export default function Sidebar({ activePage = 'inicio', onNavigate, onLogout }) {
-    const { activeClasificacion, setActiveClasificacion, validationDataMap } = useApp();
+    const { activeClasificacion, setActiveClasificacion, validationDataMap, availableResults } = useApp();
     const clasifLabel = CLASIF_LABELS[activeClasificacion] || null;
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const dropdownRef = useRef(null);
@@ -123,7 +123,7 @@ export default function Sidebar({ activePage = 'inicio', onNavigate, onLogout })
                         }}>
                             {CLASIF_OPCIONES.map(({ key, label }) => {
                                 const isActive = activeClasificacion === key;
-                                const hasData = !!(validationDataMap && validationDataMap[key]);
+                                const hasData = !!(validationDataMap && validationDataMap[key]) || (availableResults && availableResults.includes(key));
                                 return (
                                     <button
                                         key={key}

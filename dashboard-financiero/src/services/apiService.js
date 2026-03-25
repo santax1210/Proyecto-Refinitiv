@@ -174,6 +174,21 @@ export async function getProcessingStatus() {
 }
 
 /**
+ * Obtener lista de clasificaciones que tienen resultados en disco
+ */
+export async function getAvailableResults() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/results/available`, {
+            headers: authHeaders(),
+        });
+        return await handleResponse(response);
+    } catch (error) {
+        console.error('Error al obtener clasificaciones disponibles:', error);
+        throw error;
+    }
+}
+
+/**
  * Polling del estado del procesamiento hasta que se complete
  *
  * @param {Function} onProgress - Callback para actualizar progreso (recibe el estado)
@@ -409,6 +424,7 @@ export default {
     getProcessingStatus,
     pollProcessingStatus,
     getValidationResults,
+    getAvailableResults,
     getExportData,
     downloadExport,
     downloadFilteredExport,

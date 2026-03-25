@@ -126,6 +126,26 @@ def get_result_paths(clasificacion=None):
             'df_final.csv',
         )
 
+def discover_available_results():
+    """Escanea el sistema de archivos para ver qué clasificaciones tienen datos procesados."""
+    available = []
+    
+    # Check Moneda (está en el root del PROCESSED_FOLDER)
+    if os.path.exists(os.path.join(app.config['PROCESSED_FOLDER'], 'df_final.csv')):
+        available.append('moneda')
+        
+    # Check Region (está en una subcarpeta)
+    region_path = os.path.join(app.config['PROCESSED_FOLDER'], 'region', 'df_final_region.csv')
+    if os.path.exists(region_path):
+        available.append('region')
+        
+    # Check Sector (está en una subcarpeta)
+    sector_path = os.path.join(app.config['PROCESSED_FOLDER'], 'sector', 'df_final_sector.csv')
+    if os.path.exists(sector_path):
+        available.append('sector')
+        
+    return available
+
 # ==================== RUTAS ====================
 
 @app.route('/api/login', methods=['POST'])
@@ -160,6 +180,24 @@ def health_check():
         'message': 'API Flask funcionando correctamente',
         'timestamp': datetime.now().isoformat()
     })
+
+@app.route('/api/results/available', methods=['GET'])
+@token_required
+def get_available_results():
+    """Obtener lista de clasificaciones que tienen resultados en disco."""
+    try:
+        available = discover_available_results()
+        return jsonify({
+            'status': 'success',
+            'available': available,
+            'timestamp': datetime.now().isoformat()
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': f'Error al descubrir resultados: {str(e)}'
+        }), 500
+
 
 @app.route('/api/upload', methods=['POST'])
 @token_required
