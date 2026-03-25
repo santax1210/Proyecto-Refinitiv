@@ -413,6 +413,111 @@ export async function uploadAndProcess(files, onProgress) {
     }
 }
 
+// ==================== REVISIONES ====================
+
+/**
+ * Obtener las revisiones guardadas para una clasificación.
+ * @param {string} clasificacion - 'moneda', 'region', 'sector'
+ */
+export async function getReviews(clasificacion) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/reviews/${encodeURIComponent(clasificacion)}`, {
+            headers: authHeaders(),
+        });
+        return await handleResponse(response);
+    } catch (error) {
+        console.error('Error al obtener revisiones:', error);
+        throw error;
+    }
+}
+
+/**
+ * Guardar las revisiones de una clasificación en el servidor.
+ * @param {string} clasificacion - 'moneda', 'region', 'sector'
+ * @param {object} revisiones - Mapa { ID: 'Validado' | 'Rechazado' }
+ */
+export async function saveReviews(clasificacion, revisiones) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/reviews/${encodeURIComponent(clasificacion)}`, {
+            method: 'PUT',
+            headers: authHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ revisiones }),
+        });
+        return await handleResponse(response);
+    } catch (error) {
+        console.error('Error al guardar revisiones:', error);
+        throw error;
+    }
+}
+
+// ==================== HISTORIAL ======================================
+
+/**
+ * Obtener la lista de entradas del historial (solo encabezados).
+ */
+export async function getHistory() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/history`, {
+            headers: authHeaders(),
+        });
+        return await handleResponse(response);
+    } catch (error) {
+        console.error('Error al obtener historial:', error);
+        throw error;
+    }
+}
+
+/**
+ * Obtener el detalle completo de una entrada del historial.
+ * @param {string} entryId - ID de la entrada
+ */
+export async function getHistoryDetail(entryId) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/history/${encodeURIComponent(entryId)}`, {
+            headers: authHeaders(),
+        });
+        return await handleResponse(response);
+    } catch (error) {
+        console.error('Error al obtener detalle del historial:', error);
+        throw error;
+    }
+}
+
+/**
+ * Guardar la validación actual en el historial.
+ * @param {{ label?: string, clasificacion: string, summary: object, revisiones: object }} data
+ */
+export async function saveToHistory(data) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/history`, {
+            method: 'POST',
+            headers: authHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify(data),
+        });
+        return await handleResponse(response);
+    } catch (error) {
+        console.error('Error al guardar en historial:', error);
+        throw error;
+    }
+}
+
+/**
+ * Eliminar una entrada del historial.
+ * @param {string} entryId - ID de la entrada a eliminar
+ */
+export async function deleteHistoryEntry(entryId) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/history/${encodeURIComponent(entryId)}`, {
+            method: 'DELETE',
+            headers: authHeaders(),
+        });
+        return await handleResponse(response);
+    } catch (error) {
+        console.error('Error al eliminar del historial:', error);
+        throw error;
+    }
+}
+
 export default {
     login,
     logout,
@@ -430,4 +535,10 @@ export default {
     downloadFilteredExport,
     resetProcessing,
     uploadAndProcess,
+    getHistory,
+    getHistoryDetail,
+    saveToHistory,
+    deleteHistoryEntry,
+    getReviews,
+    saveReviews,
 };

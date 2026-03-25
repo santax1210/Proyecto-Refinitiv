@@ -35,6 +35,8 @@ app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max file size
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'raw')
 app.config['PROCESSED_FOLDER'] = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'processed')
 app.config['EXPORTS_FOLDER'] = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'exports')
+app.config['HISTORY_FOLDER'] = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'history')
+app.config['REVIEWS_FOLDER'] = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'reviews')
 
 # ==================== AUTENTICACIÓN ====================
 
@@ -317,6 +319,11 @@ def process_pipeline():
             'error': None
         })
         
+        # Borrar revisiones de esta clasificación (se re-crean desde cero)
+        reviews_path = os.path.join(app.config['REVIEWS_FOLDER'], f'{clasificacion}.json')
+        if os.path.exists(reviews_path):
+            os.remove(reviews_path)
+
         # Ejecutar en thread
         thread = threading.Thread(target=run_pipeline_background, args=(clasificacion,))
         thread.daemon = True
@@ -823,6 +830,188 @@ def download_filtered_export(export_type):
             'message': f'Error al descargar archivo filtrado: {str(e)}'
         }), 500
 
+# ==================== REVISIONES ====================
+
+@app.route('/api/reviews/<clasificacion>', methods=['GET'])
+@token_required
+def get_reviews(clasificacion):
+    """Obtener las revisiones guardadas para una clasificación."""
+    try:
+        clasif = normalize_clasificacion(clasificacion)
+        filepath = os.path.join(app.config['REVIEWS_FOLDER'], f'{clasif}.json')
+        if not os.path.exists(filepath):
+            return jsonify({'status': 'success', 'revisiones': {}})
+
+        with open(filepath, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        return jsonify({'status': 'success', 'revisiones': data.get('revisiones', {})})
+
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f'Error al leer revisiones: {str(e)}'}), 500
+
+
+@app.route('/api/reviews/<clasificacion>', methods=['PUT'])
+@token_required
+def save_reviews(clasificacion):
+    """Guardar/actualizar las revisiones de una clasificación."""
+    try:
+        clasif = normalize_clasificacion(clasificacion)
+        data = request.get_json()
+        if not data or 'revisiones' not in data:
+            return jsonify({'status': 'error', 'message': 'Body debe contener "revisiones"'}), 400
+
+        os.makedirs(app.config['REVIEWS_FOLDER'], exist_ok=True)
+        filepath = os.path.join(app.config['REVIEWS_FOLDER'], f'{clasif}.json')
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump({'revisiones': data['revisiones'], 'updated_at': datetime.now().isoformat()}, f, ensure_ascii=False)
+
+        return jsonify({'status': 'success', 'message': 'Revisiones guardadas'})
+
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f'Error al guardar revisiones: {str(e)}'}), 500
+
+
+# ==================== HISTORIAL ====================
+
+@app.route('/api/history', methods=['POST'])
+@token_required
+def save_history():
+    """
+    Guardar una validación en el historial.
+
+    Body (JSON):
+    {
+        "label": "Validación Marzo",         // etiqueta descriptiva (opcional)
+        "clasificacion": "moneda",
+        "summary": { ... },                   // resumen del pipeline
+        "revisiones": { "23": "Validado", ...} // mapa ID -> estado
+    }
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'status': 'error', 'message': 'Body vacío'}), 400
+
+        clasificacion = normalize_clasificacion(data.get('clasificacion', 'moneda'))
+
+        # Leer df_final para generar métricas y snapshot de instrumentos
+        proc_folder, _, df_final_name = get_result_paths(clasificacion)
+        df_final_path = os.path.join(proc_folder, df_final_name)
+
+        instruments = []
+        if os.path.exists(df_final_path):
+            import pandas as pd
+            df = pd.read_csv(df_final_path, sep=';', encoding='utf-8')
+            df = df.astype(object).where(pd.notna(df), None)
+            instruments = df.to_dict(orient='records')
+
+        revisiones = data.get('revisiones', {})
+        summary = data.get('summary', {})
+
+        total = len(instruments)
+        validados = sum(1 for v in revisiones.values() if v == 'Validado')
+        rechazados = sum(1 for v in revisiones.values() if v == 'Rechazado')
+        pendientes = total - validados - rechazados
+        alta_variacion = sum(1 for r in instruments if r.get('nivel_variacion') == 'Alta')
+
+        entry_id = f"hist_{int(time.time())}_{clasificacion}"
+        entry = {
+            'id': entry_id,
+            'label': data.get('label', '').strip() or f'Validación {clasificacion.capitalize()}',
+            'clasificacion': clasificacion,
+            'timestamp': datetime.now().isoformat(),
+            'metrics': {
+                'total': total,
+                'validados': validados,
+                'rechazados': rechazados,
+                'pendientes': pendientes,
+                'pct_avance': round((validados + rechazados) / total * 100, 1) if total > 0 else 0,
+                'alta_variacion': alta_variacion,
+            },
+            'summary': summary,
+            'revisiones': revisiones,
+            'instruments': instruments,
+        }
+
+        os.makedirs(app.config['HISTORY_FOLDER'], exist_ok=True)
+        filepath = os.path.join(app.config['HISTORY_FOLDER'], f'{entry_id}.json')
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(entry, f, ensure_ascii=False, indent=2)
+
+        return jsonify({
+            'status': 'success',
+            'message': 'Validación guardada en el historial',
+            'id': entry_id,
+        }), 201
+
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f'Error al guardar historial: {str(e)}'}), 500
+
+
+@app.route('/api/history', methods=['GET'])
+@token_required
+def list_history():
+    """Listar todas las entradas del historial (solo encabezados, sin instrumentos)."""
+    try:
+        folder = app.config['HISTORY_FOLDER']
+        if not os.path.isdir(folder):
+            return jsonify({'status': 'success', 'entries': []})
+
+        entries = []
+        for fname in sorted(os.listdir(folder), reverse=True):
+            if not fname.endswith('.json'):
+                continue
+            with open(os.path.join(folder, fname), 'r', encoding='utf-8') as f:
+                entry = json.load(f)
+            # Devolver solo encabezado (sin la lista de instrumentos pesada)
+            entries.append({
+                'id': entry['id'],
+                'label': entry.get('label', ''),
+                'clasificacion': entry.get('clasificacion', ''),
+                'timestamp': entry.get('timestamp', ''),
+                'metrics': entry.get('metrics', {}),
+            })
+
+        return jsonify({'status': 'success', 'entries': entries})
+
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f'Error al listar historial: {str(e)}'}), 500
+
+
+@app.route('/api/history/<entry_id>', methods=['GET'])
+@token_required
+def get_history_detail(entry_id):
+    """Obtener el detalle completo de una entrada del historial."""
+    try:
+        filepath = os.path.join(app.config['HISTORY_FOLDER'], f'{entry_id}.json')
+        if not os.path.exists(filepath):
+            return jsonify({'status': 'error', 'message': 'Entrada no encontrada'}), 404
+
+        with open(filepath, 'r', encoding='utf-8') as f:
+            entry = json.load(f)
+
+        return jsonify({'status': 'success', 'entry': entry})
+
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f'Error al leer historial: {str(e)}'}), 500
+
+
+@app.route('/api/history/<entry_id>', methods=['DELETE'])
+@token_required
+def delete_history_entry(entry_id):
+    """Eliminar una entrada del historial."""
+    try:
+        filepath = os.path.join(app.config['HISTORY_FOLDER'], f'{entry_id}.json')
+        if not os.path.exists(filepath):
+            return jsonify({'status': 'error', 'message': 'Entrada no encontrada'}), 404
+
+        os.remove(filepath)
+        return jsonify({'status': 'success', 'message': 'Entrada eliminada'})
+
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f'Error al eliminar: {str(e)}'}), 500
+
+
 # ==================== ERROR HANDLERS ====================
 
 @app.errorhandler(413)
@@ -856,6 +1045,7 @@ if __name__ == '__main__':
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
     os.makedirs(app.config['PROCESSED_FOLDER'], exist_ok=True)
     os.makedirs(app.config['EXPORTS_FOLDER'], exist_ok=True)
+    os.makedirs(app.config['HISTORY_FOLDER'], exist_ok=True)
     
     print("\n" + "="*60)
     print(" API FLASK - Validación de Allocations ".center(60, "="))
@@ -873,6 +1063,10 @@ if __name__ == '__main__':
     print(f"   - GET  /api/results/exports/<type>")
     print(f"   - GET  /api/download/<type>")
     print(f"   - DELETE /api/reset")
+    print(f"   - POST /api/history")
+    print(f"   - GET  /api/history")
+    print(f"   - GET  /api/history/<id>")
+    print(f"   - DELETE /api/history/<id>")
     print("="*60 + "\n")
     
     # Correr servidor (debug mode solo en desarrollo)

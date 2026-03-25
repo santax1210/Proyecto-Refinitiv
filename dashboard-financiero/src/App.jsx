@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import './index.css';
 
 import Sidebar from './components/Sidebar';
@@ -9,6 +9,7 @@ import CategorySection from './components/CategorySection';
 import InicioPage from './pages/InicioPage';
 import ValidacionPage from './pages/ValidacionPage';
 import VisualizacionPage from './pages/VisualizacionPage';
+import HistorialPage from './pages/HistorialPage';
 import LoginPage from './pages/LoginPage';
 import { AppProvider } from './context/AppContext';
 import { isAuthenticated, logout } from './services/apiService';
@@ -45,6 +46,7 @@ function MainContent({ activePage, onNavigate, selectedId, onSelect }) {
       case 'inicio': return <InicioPage onNavigate={onNavigate} />;
       case 'validacion': return <ValidacionPage onNavigate={onNavigate} onSelect={onSelect} />;
       case 'visualizacion': return <VisualizacionPage selectedId={selectedId} onSelect={onSelect} />;
+      case 'historial': return <HistorialPage />;
       case 'ajustes': return <PlaceholderPage name="Ajustes" />;
       default: return <InicioPage onNavigate={onNavigate} />;
     }
@@ -64,8 +66,15 @@ function MainContent({ activePage, onNavigate, selectedId, onSelect }) {
 
 export default function App() {
   const [loggedIn, setLoggedIn] = useState(() => isAuthenticated());
-  const [activePage, setActivePage] = useState('inicio');
+  const [activePage, setActivePage] = useState(() => {
+    return localStorage.getItem('allocations_active_page') || 'inicio';
+  });
   const [selectedInstrumentId, setSelectedInstrumentId] = useState(23);
+
+  // Persistir la página activa en cada cambio
+  useEffect(() => {
+    localStorage.setItem('allocations_active_page', activePage);
+  }, [activePage]);
 
   function handleLoginSuccess() {
     setLoggedIn(true);

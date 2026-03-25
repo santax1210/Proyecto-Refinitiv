@@ -1,5 +1,5 @@
 import { useRef, useState, useMemo, useEffect, useCallback } from 'react';
-import { downloadExport, downloadFilteredExport } from '../services/apiService';
+import { downloadExport, downloadFilteredExport, saveToHistory, getReviews, saveReviews } from '../services/apiService';
 import { useToast } from '../context/ToastContext';
 
 // Formatea strings de pct_dominancia ("CLP 100.00%%" → "CLP 100%", "Technology 85.00%" → "Technology 85%")
@@ -279,6 +279,10 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
     const [loading, setLoading] = useState(false);
     const [downloading, setDownloading] = useState(null); // 'balanceados', 'no_balanceados', 'sin_datos', null
     const [showGlosario, setShowGlosario] = useState(false);
+    // Modal para guardar en historial
+    const [showHistorialModal, setShowHistorialModal] = useState(false);
+    const [historialLabel, setHistorialLabel] = useState('');
+    const [savingHistorial, setSavingHistorial] = useState(false);
     // Workflow guiado — inicializados directamente desde localStorage (evita race condition de efectos)
     const [workflowMode, setWorkflowMode] = useState(() => {
         if (!activeClasificacion) return true;
@@ -329,9 +333,20 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
         } catch { /* ignorar */ }
 
         try {
+            // Cargar primero desde localStorage como caché instantánea
             const savedRev = localStorage.getItem(`allocations_revisiones_${activeClasificacion}`);
             setRevisiones(savedRev ? JSON.parse(savedRev) : {});
         } catch { setRevisiones({}); }
+
+        // Luego cargar desde el servidor (source of truth)
+        getReviews(activeClasificacion)
+            .then(res => {
+                if (res?.revisiones) {
+                    setRevisiones(res.revisiones);
+                    try { localStorage.setItem(`allocations_revisiones_${activeClasificacion}`, JSON.stringify(res.revisiones)); } catch { }
+                }
+            })
+            .catch(() => { /* usar caché local si el server no responde */ });
 
         // Restaurar selección
         try {
@@ -353,11 +368,20 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
     }, [activeClasificacion]);
 
     // Persistir revisiones cuando cambian (usa ref para clave correcta)
+    // Debounce: guarda en servidor después de 500ms de inactividad
+    const saveTimeoutRef = useRef(null);
     useEffect(() => {
         if (!activeClasifRef.current) return;
+        // Caché local inmediata
         try {
             localStorage.setItem(`allocations_revisiones_${activeClasifRef.current}`, JSON.stringify(revisiones));
         } catch { /* cuota excedida u otro error, ignorar */ }
+        // Debounce al servidor
+        if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = setTimeout(() => {
+            saveReviews(activeClasifRef.current, revisiones).catch(() => { });
+        }, 500);
+        return () => { if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current); };
     }, [revisiones]);
 
     // Persistir filtros cuando cambian (usa ref para clave correcta)
@@ -1736,6 +1760,90 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                         </div>
 
                     </div>{/* fin card */}
+
+                    {/* ── Botón Agregar a historial ── */}
+                    <div style={{ display: 'flex', justifyContent: 'center', marginTop: 8, marginBottom: 8 }}>
+                        <button
+                            id="btn-agregar-historial"
+                            onClick={() => { setHistorialLabel(''); setShowHistorialModal(true); }}
+                            style={{
+                                display: 'flex', alignItems: 'center', gap: 10,
+                                padding: '12px 28px', borderRadius: 12,
+                                border: '2px solid #299D91',
+                                backgroundColor: '#FFFFFF', color: '#299D91',
+                                fontSize: 14, fontWeight: 700,
+                                cursor: 'pointer',
+                                transition: 'all 0.2s',
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#299D91'; e.currentTarget.style.color = '#FFFFFF'; }}
+                            onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#FFFFFF'; e.currentTarget.style.color = '#299D91'; }}
+                        >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+                            </svg>
+                            Agregar a historial
+                        </button>
+                    </div>
+
+                    {/* ── Modal: Guardar en historial ── */}
+                    {showHistorialModal && (
+                        <div onClick={() => setShowHistorialModal(false)}
+                            style={{ position: 'fixed', inset: 0, zIndex: 300, backgroundColor: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <div onClick={e => e.stopPropagation()}
+                                style={{ backgroundColor: '#FFFFFF', borderRadius: 16, padding: '28px 32px', width: 440, maxWidth: '92vw', boxShadow: '0 20px 40px rgba(0,0,0,0.18)' }}>
+                                <h3 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 700, color: '#191919' }}>Guardar validación en historial</h3>
+                                <p style={{ margin: '0 0 18px', fontSize: 13, color: '#71717A' }}>
+                                    Se guardará un snapshot completo de la validación actual con todas las métricas y estados de revisión.
+                                </p>
+                                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#525256', marginBottom: 6 }}>
+                                    Etiqueta (opcional)
+                                </label>
+                                <input
+                                    type="text"
+                                    value={historialLabel}
+                                    onChange={e => setHistorialLabel(e.target.value)}
+                                    placeholder={`Validación ${(activeClasificacion || 'moneda').charAt(0).toUpperCase() + (activeClasificacion || 'moneda').slice(1)}`}
+                                    style={{
+                                        width: '100%', padding: '10px 14px', borderRadius: 10,
+                                        border: '1.5px solid #E5E7EB', fontSize: 14, outline: 'none',
+                                        marginBottom: 20, boxSizing: 'border-box',
+                                    }}
+                                    onFocus={e => e.target.style.borderColor = '#299D91'}
+                                    onBlur={e => e.target.style.borderColor = '#E5E7EB'}
+                                    autoFocus
+                                />
+                                <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                                    <button onClick={() => setShowHistorialModal(false)}
+                                        disabled={savingHistorial}
+                                        style={{ padding: '9px 18px', borderRadius: 10, border: '1.5px solid #E5E7EB', backgroundColor: '#FFFFFF', color: '#525256', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        disabled={savingHistorial}
+                                        onClick={async () => {
+                                            setSavingHistorial(true);
+                                            try {
+                                                await saveToHistory({
+                                                    label: historialLabel.trim(),
+                                                    clasificacion: activeClasificacion || 'moneda',
+                                                    summary: summary || {},
+                                                    revisiones,
+                                                });
+                                                toast({ message: 'Validación guardada en el historial', type: 'success', duration: 5000 });
+                                                setShowHistorialModal(false);
+                                            } catch (err) {
+                                                toast({ message: `Error al guardar: ${err.message}`, type: 'error' });
+                                            } finally {
+                                                setSavingHistorial(false);
+                                            }
+                                        }}
+                                        style={{ padding: '9px 22px', borderRadius: 10, border: 'none', backgroundColor: '#299D91', color: '#FFFFFF', fontSize: 13, fontWeight: 700, cursor: savingHistorial ? 'default' : 'pointer', opacity: savingHistorial ? 0.6 : 1 }}>
+                                        {savingHistorial ? 'Guardando...' : 'Guardar'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                 </>
             )}{/* fin contenido principal */}

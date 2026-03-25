@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
-import { getInstrumentDetail } from '../services/apiService';
+import { getInstrumentDetail, getReviews, saveReviews } from '../services/apiService';
 
 /* ── Paleta ── */
 const TEAL = '#299D91';
@@ -322,7 +322,7 @@ export default function VisualizacionPage({ selectedId: propId, onSelect }) {
     const [searchId, setSearchId] = useState('');
     const [detail, setDetail] = useState(null);
     const [loadingDetail, setLoadingDetail] = useState(false);
-    // Revisiones state (localStorage, compartido con ValidacionPage, separado por clasificación)
+    // Revisiones state (localStorage como caché, servidor como source of truth)
     const [revisiones, setRevisiones] = useState(() => {
         try {
             const key = activeClasificacion ? `allocations_revisiones_${activeClasificacion}` : 'allocations_revisiones';
@@ -330,12 +330,31 @@ export default function VisualizacionPage({ selectedId: propId, onSelect }) {
             return saved ? JSON.parse(saved) : {};
         } catch { return {}; }
     });
-    // Persist revisiones to localStorage
+
+    // Cargar revisiones del servidor al montar o cambiar clasificación
+    useEffect(() => {
+        if (!activeClasificacion) return;
+        getReviews(activeClasificacion)
+            .then(res => {
+                if (res?.revisiones) {
+                    setRevisiones(res.revisiones);
+                    try { localStorage.setItem(`allocations_revisiones_${activeClasificacion}`, JSON.stringify(res.revisiones)); } catch { }
+                }
+            })
+            .catch(() => { });
+    }, [activeClasificacion]);
+
+    // Persist revisiones con debounce al servidor
+    const saveRevTimeoutRef = useRef(null);
     useEffect(() => {
         const key = activeClasificacion ? `allocations_revisiones_${activeClasificacion}` : 'allocations_revisiones';
-        try {
-            localStorage.setItem(key, JSON.stringify(revisiones));
-        } catch {}
+        try { localStorage.setItem(key, JSON.stringify(revisiones)); } catch { }
+        if (!activeClasificacion) return;
+        if (saveRevTimeoutRef.current) clearTimeout(saveRevTimeoutRef.current);
+        saveRevTimeoutRef.current = setTimeout(() => {
+            saveReviews(activeClasificacion, revisiones).catch(() => { });
+        }, 500);
+        return () => { if (saveRevTimeoutRef.current) clearTimeout(saveRevTimeoutRef.current); };
     }, [revisiones, activeClasificacion]);
 
 

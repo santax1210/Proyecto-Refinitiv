@@ -17,22 +17,36 @@ if (-not (Test-Path "api\app.py")) {
 # Función para verificar si un puerto está en uso
 function Test-Port {
     param([int]$Port)
-    $connection = Test-NetConnection -ComputerName localhost -Port $Port -InformationLevel Quiet -WarningAction SilentlyContinue
-    return $connection
+    $res = Get-NetTCPConnection -LocalPort $Port -ErrorAction SilentlyContinue
+    return [bool]$res
+}
+
+# Función para detener un proceso que ocupa un puerto
+function Stop-PortProcess {
+    param([int]$Port)
+    $processes = Get-NetTCPConnection -LocalPort $Port -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique
+    foreach ($pid in $processes) {
+        if ($pid) {
+            Write-Host "      [FIX] Cerrando proceso en puerto $Port (PID: $pid)..." -ForegroundColor Cyan
+            try {
+                Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+            } catch {}
+        }
+    }
+    # Esperar un momento para que el sistema libere el puerto
+    Start-Sleep -Milliseconds 1500
 }
 
 # Verificar puertos
 Write-Host "[CHECK] Verificando puertos..." -ForegroundColor Yellow
 if (Test-Port 5000) {
     Write-Host "[WARNING] Puerto 5000 ya esta en uso (Backend)" -ForegroundColor Yellow
-    $response = Read-Host "Deseas continuar de todas formas? (s/n)"
-    if ($response -ne 's') { exit 0 }
+    Stop-PortProcess 5000
 }
 
 if (Test-Port 5173) {
     Write-Host "[WARNING] Puerto 5173 ya esta en uso (Frontend)" -ForegroundColor Yellow
-    $response = Read-Host "Deseas continuar de todas formas? (s/n)"
-    if ($response -ne 's') { exit 0 }
+    Stop-PortProcess 5173
 }
 
 # Iniciar Backend (Flask)
@@ -68,7 +82,7 @@ Write-Host "      Puerto: 5173" -ForegroundColor Gray
 $frontendJob = Start-Job -ScriptBlock {
     Set-Location $using:PWD
     Set-Location dashboard-financiero
-    & npm run dev
+    & npx vite --port 5173 --strictPort
 }
 
 Start-Sleep -Seconds 5
