@@ -8,10 +8,10 @@ const BORDER = '#DDE3E6';
 const CLASIFICACIONES = ['Moneda', 'Región', 'Industria'];
 
 const SLOTS = [
-    { key: 'posiciones',          label: 'Posiciones',      desc: 'archivo de posiciones' },
-    { key: 'instruments',         label: 'Instrumentos',    desc: 'maestro de instrumentos' },
-    { key: 'allocations_nuevas',  label: 'Alloc. Nuevas',   desc: 'formato WIDE' },
-    { key: 'allocations_antiguas',label: 'Alloc. Antiguas', desc: 'históricas' },
+    { key: 'posiciones', label: 'Posiciones', desc: 'archivo de posiciones' },
+    { key: 'instruments', label: 'Instrumentos', desc: 'maestro de instrumentos' },
+    { key: 'allocations_nuevas', label: 'Alloc. Nuevas', desc: 'formato WIDE' },
+    { key: 'allocations_antiguas', label: 'Alloc. Antiguas', desc: 'históricas' },
 ];
 
 /* ── Slot individual de archivo ── */
@@ -85,7 +85,7 @@ function FileSlot({ slotKey, label, desc, file, onFile, onClear }) {
 
 
 
-export default function InicioPage() {
+export default function InicioPage({ onNavigate }) {
     const { clasificacion, setClasificacion, uploadAndProcess, processingState } = useApp();
     const toast = useToast();
     const navigate = useNavigate();
@@ -93,11 +93,11 @@ export default function InicioPage() {
     const [processing, setProcessing] = useState(false);
     const [error, setError] = useState(null);
 
-    const handleFile  = (key, file) => setSlots(prev => ({ ...prev, [key]: file }));
+    const handleFile = (key, file) => setSlots(prev => ({ ...prev, [key]: file }));
     const handleClear = (key) => setSlots(prev => { const n = { ...prev }; delete n[key]; return n; });
 
     const filledCount = Object.keys(slots).length;
-    const allReady    = filledCount === SLOTS.length && !!clasificacion;
+    const allReady = filledCount === SLOTS.length && !!clasificacion;
 
     const btnLabel = processing
         ? 'Procesando...'
@@ -115,7 +115,11 @@ export default function InicioPage() {
             await uploadAndProcess({ ...slots });
             toast({ message: 'Pipeline completado. Revisá los resultados en Validación.', type: 'success', duration: 2500 });
             setTimeout(() => {
-                navigate('/validacion');
+                if (onNavigate) {
+                    onNavigate('validacion');
+                } else {
+                    navigate('/validacion'); // Fallback en caso de que no venga onNavigate
+                }
             }, 2500);
         } catch (err) {
             const msg = err.message || 'Error al procesar archivos';

@@ -57,7 +57,7 @@ const WORKFLOW_STEPS = [
     {
         paso: 1, sub: 3, tab: 'Balanceado', estadoIdx: 3, variacion: null,
         label: 'Balanceados · Estado 3',
-        desc: 'Instrumentos balanceados con cambios significativos de clasificación. Revisar con atención antes de validar.'
+        desc: 'Instrumentos SIN ALLOCATIONS en el sistema'
     },
     // Paso 2 · Con cambios · Baja variación
     {
@@ -178,20 +178,24 @@ function DotsIcon() {
 
 function AlertaDominanciaIcon({ tipo }) {
     if (!tipo) return null;
+    const [showTooltip, setShowTooltip] = useState(false);
     const isDesaparece = tipo === 'DESAPARECE';
     const color = isDesaparece ? '#D97706' : '#D94A38';
-    const title = isDesaparece
-        ? '\u26a0\ufe0f Desaparece: la categor\u00eda dominante anterior ya no existe en la nueva distribuci\u00f3n'
-        : '\uD83D\uDD34 Nueva: esta categor\u00eda dominante no exist\u00eda en la distribuci\u00f3n anterior';
+    const text = isDesaparece
+        ? 'La clase dominante anterior ya no existe en la nueva distribución'
+        : 'Esta nueva clase dominante no existía en la distribución anterior.';
+
     return (
         <span
-            title={title}
+            onMouseEnter={() => setShowTooltip(true)}
+            onMouseLeave={() => setShowTooltip(false)}
             style={{
                 flexShrink: 0,
                 display: 'inline-flex',
                 alignItems: 'center',
                 cursor: 'help',
                 marginRight: 2,
+                position: 'relative'
             }}
         >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
@@ -200,6 +204,43 @@ function AlertaDominanciaIcon({ tipo }) {
                 <line x1="12" y1="9" x2="12" y2="13" />
                 <line x1="12" y1="17" x2="12.01" y2="17" />
             </svg>
+            {showTooltip && (
+                <div style={{
+                    position: 'absolute',
+                    bottom: 'calc(100% + 10px)',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    backgroundColor: '#1E293B',
+                    color: '#FFFFFF',
+                    padding: '10px 16px',
+                    borderRadius: '10px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    whiteSpace: 'normal',
+                    width: 'max-content',
+                    maxWidth: '260px',
+                    zIndex: 200,
+                    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+                    pointerEvents: 'none',
+                    textAlign: 'center',
+                    lineHeight: '1.4',
+                    animation: 'fadeInScale 0.15s ease-out both'
+                }}>
+                    {text}
+                    {/* Flecha */}
+                    <div style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        width: 0,
+                        height: 0,
+                        borderLeft: '7px solid transparent',
+                        borderRight: '7px solid transparent',
+                        borderTop: '7px solid #1E293B'
+                    }} />
+                </div>
+            )}
         </span>
     );
 }
@@ -855,21 +896,23 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                                 </div>
 
                                 {/* Pasos */}
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 0, minHeight: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 0, minHeight: 60, padding: '10px 0' }}>
                                     {PASO_META.map((meta, i) => {
-                                        const isActive = workflowMode && _wfStep.paso === meta.num;
-                                        const isCompleto = isPasoCompleto(meta.num);
-                                        const isFuturo = workflowMode && _wfStep.paso < meta.num && !isCompleto;
-                                        const firstSubIdx = WORKFLOW_STEPS.findIndex(s => s.paso === meta.num);
+                                        const stepNum = meta.num;
+                                        const isActive = workflowMode && _wfStep.paso === stepNum;
+                                        const firstSubIdx = WORKFLOW_STEPS.findIndex(s => s.paso === stepNum);
 
                                         return (
-                                            <div key={meta.num} style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
+                                            <div key={stepNum} style={{ display: 'flex', alignItems: 'center', flex: 1, position: 'relative' }}>
                                                 {/* Conector izquierdo */}
                                                 {i > 0 && (
                                                     <div style={{
-                                                        flex: 1, height: 2,
-                                                        backgroundColor: isPasoCompleto(PASO_META[i - 1].num) ? '#299D91' : '#E5E7EB',
-                                                        transition: 'background-color 0.3s',
+                                                        flex: 1, height: 4,
+                                                        backgroundColor: '#E5E7EB',
+                                                        borderRadius: 2,
+                                                        margin: '0 -4px',
+                                                        zIndex: 0,
+                                                        transition: 'background-color 0.3s ease',
                                                     }} />
                                                 )}
 
@@ -880,35 +923,71 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                                                         setWorkflowMode(true);
                                                         setPage(1);
                                                     }}
-                                                    title={`Ir al Paso ${meta.num}: ${meta.title}`}
+                                                    onMouseEnter={e => {
+                                                        if (!isActive) {
+                                                            e.currentTarget.querySelector('.step-node').style.transform = 'scale(1.15)';
+                                                            e.currentTarget.querySelector('.step-node').style.borderColor = meta.color;
+                                                        }
+                                                    }}
+                                                    onMouseLeave={e => {
+                                                        if (!isActive) {
+                                                            e.currentTarget.querySelector('.step-node').style.transform = 'scale(1)';
+                                                            e.currentTarget.querySelector('.step-node').style.borderColor = '#DDE3E6';
+                                                        }
+                                                    }}
+                                                    title={`Ir al Paso ${stepNum}: ${meta.title}`}
                                                     style={{
-                                                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
-                                                        background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px',
-                                                        flexShrink: 0,
+                                                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+                                                        background: 'none', border: 'none', cursor: 'pointer', padding: '0 8px',
+                                                        flexShrink: 0, zIndex: 10, outline: 'none',
                                                     }}
                                                 >
-                                                    {/* Círculo numerado */}
-                                                    <div style={{
-                                                        width: 22, height: 22, borderRadius: '50%',
-                                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                        backgroundColor: isCompleto ? '#299D91' : isActive ? meta.color : '#F3F4F6',
-                                                        border: `2px solid ${isCompleto ? '#299D91' : isActive ? meta.color : isFuturo ? '#E5E7EB' : '#DDE3E6'}`,
-                                                        color: isCompleto || isActive ? '#FFFFFF' : '#9F9F9F',
-                                                        fontSize: 11, fontWeight: 700,
-                                                        boxShadow: isActive ? `0 0 0 2px ${meta.bg}` : 'none',
-                                                        transition: 'all 0.2s',
-                                                    }}>
-                                                        {isCompleto
-                                                            ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-                                                            : meta.num
-                                                        }
+                                                    {/* Círculo numerado (Nodo) */}
+                                                    <div
+                                                        className="step-node"
+                                                        style={{
+                                                            width: 34, height: 34, borderRadius: '50%',
+                                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                            backgroundColor: isActive ? meta.color : '#FFFFFF',
+                                                            border: `3px solid ${isActive ? meta.color : '#DDE3E6'}`,
+                                                            color: isActive ? '#FFFFFF' : '#9F9F9F',
+                                                            fontSize: 13, fontWeight: 800,
+                                                            boxShadow: isActive
+                                                                ? `0 0 15px ${meta.color}60, 0 4px 10px rgba(0,0,0,0.12)`
+                                                                : '0 2px 5px rgba(0,0,0,0.05)',
+                                                            transform: isActive ? 'scale(1.1)' : 'scale(1)',
+                                                            transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                                                            position: 'relative'
+                                                        }}
+                                                    >
+                                                        {stepNum}
+                                                        {isActive && (
+                                                            <div style={{
+                                                                position: 'absolute',
+                                                                inset: -6,
+                                                                borderRadius: '50%',
+                                                                border: `2px solid ${meta.color}30`,
+                                                                animation: 'pulse-glow 2s infinite'
+                                                            }} />
+                                                        )}
                                                     </div>
                                                     {/* Etiqueta */}
-                                                    <div style={{ textAlign: 'center' }}>
-                                                        <div style={{ fontSize: 9.5, fontWeight: 700, color: isActive ? meta.color : isCompleto ? '#299D91' : '#9F9F9F', whiteSpace: 'nowrap' }}>
+                                                    <div style={{ textAlign: 'center', transition: 'all 0.3s ease' }}>
+                                                        <div style={{
+                                                            fontSize: 11, fontWeight: 800,
+                                                            color: isActive ? meta.color : '#71717A',
+                                                            whiteSpace: 'nowrap',
+                                                            letterSpacing: '0.02em',
+                                                            transform: isActive ? 'translateY(-1px)' : 'none'
+                                                        }}>
                                                             {meta.title}
                                                         </div>
-                                                        <div style={{ fontSize: 8.5, color: '#B0B0B0', whiteSpace: 'nowrap' }}>
+                                                        <div style={{
+                                                            fontSize: 9,
+                                                            fontWeight: 600,
+                                                            color: isActive ? `${meta.color}CC` : '#B0B0B0',
+                                                            whiteSpace: 'nowrap'
+                                                        }}>
                                                             {meta.subtitle}
                                                         </div>
                                                     </div>
@@ -917,9 +996,12 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                                                 {/* Conector derecho (solo en último nodo a la derecha) */}
                                                 {i < PASO_META.length - 1 && (
                                                     <div style={{
-                                                        flex: 1, height: 2,
-                                                        backgroundColor: isCompleto ? '#299D91' : '#E5E7EB',
-                                                        transition: 'background-color 0.3s',
+                                                        flex: 1, height: 4,
+                                                        backgroundColor: '#E5E7EB',
+                                                        borderRadius: 2,
+                                                        margin: '0 -4px',
+                                                        zIndex: 0,
+                                                        transition: 'background-color 0.3s ease',
                                                     }} />
                                                 )}
                                             </div>
@@ -1117,10 +1199,10 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                                                     </span>
                                                 )}
                                             </div>
-                                            <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: '#191919' }}>
+                                            <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#191919' }}>
                                                 {step.label}
                                             </p>
-                                            <p style={{ margin: '2px 0 0', fontSize: 11, color: '#71717A' }}>
+                                            <p style={{ margin: '4px 0 0', fontSize: 13, fontWeight: 600, color: '#374151', lineHeight: '1.5' }}>
                                                 {step.desc}
                                             </p>
                                         </div>

@@ -42,11 +42,11 @@ function OverviewPage() {
 function MainContent({ activePage, onNavigate, selectedId, onSelect }) {
   const renderPage = () => {
     switch (activePage) {
-      case 'inicio': return <InicioPage />;
+      case 'inicio': return <InicioPage onNavigate={onNavigate} />;
       case 'validacion': return <ValidacionPage onNavigate={onNavigate} onSelect={onSelect} />;
       case 'visualizacion': return <VisualizacionPage selectedId={selectedId} onSelect={onSelect} />;
       case 'ajustes': return <PlaceholderPage name="Ajustes" />;
-      default: return <InicioPage />;
+      default: return <InicioPage onNavigate={onNavigate} />;
     }
   };
 
