@@ -45,7 +45,7 @@ function MainContent({ activePage, onNavigate, selectedId, onSelect }) {
     switch (activePage) {
       case 'inicio': return <InicioPage onNavigate={onNavigate} />;
       case 'validacion': return <ValidacionPage onNavigate={onNavigate} onSelect={onSelect} />;
-      case 'visualizacion': return <VisualizacionPage selectedId={selectedId} onSelect={onSelect} />;
+      case 'visualizacion': return <VisualizacionPage selectedId={selectedId} onSelect={onSelect} onNavigate={onNavigate} />;
       case 'historial': return <HistorialPage />;
       case 'ajustes': return <PlaceholderPage name="Ajustes" />;
       default: return <InicioPage onNavigate={onNavigate} />;

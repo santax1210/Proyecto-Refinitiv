@@ -113,10 +113,10 @@ const WORKFLOW_STEPS = [
 ];
 
 const PASO_META = [
-    { num: 1, title: 'Sin cambios', subtitle: 'Baja variación', color: '#299D91', bg: '#EBF7F6' },
-    { num: 2, title: 'Con cambios', subtitle: 'Baja variación', color: '#3B82F6', bg: '#EFF6FF' },
-    { num: 3, title: 'Sin cambios', subtitle: 'Alta variación', color: '#F59E0B', bg: '#FFFBEB' },
-    { num: 4, title: 'Con cambios', subtitle: 'Alta variación', color: '#F97316', bg: '#FFF7ED' },
+    { num: 1, title: 'Sin cambios de estado', subtitle: 'Baja variación', color: '#299D91', bg: '#EBF7F6' },
+    { num: 2, title: 'Con cambios de estado', subtitle: 'Baja variación', color: '#3B82F6', bg: '#EFF6FF' },
+    { num: 3, title: 'Sin cambios de estado', subtitle: 'Alta variación', color: '#F59E0B', bg: '#FFFBEB' },
+    { num: 4, title: 'Con cambios de estado', subtitle: 'Alta variación', color: '#F97316', bg: '#FFF7ED' },
     { num: 5, title: 'Estado crítico', subtitle: 'Rev. exhaustiva', color: '#D94A38', bg: '#FFF0EE' },
 ];
 
@@ -249,13 +249,21 @@ function AlertaDominanciaIcon({ tipo }) {
 const borderBottom = { borderBottom: '1px solid #F0F0F0' };
 const borderTop = { borderTop: '1px solid #F0F0F0' };
 
+const getSavedFilters = (clasif) => {
+    if (!clasif) return {};
+    try {
+        const saved = localStorage.getItem(`allocations_filtros_${clasif}`);
+        return saved ? JSON.parse(saved) : {};
+    } catch { return {}; }
+};
+
 
 export default function ValidacionPage({ onNavigate, onSelect }) {
     const { validationData, loadValidationResults, summary, activeClasificacion, setActiveClasificacion, validationDataMap, completedPasosMap, updateCompletedPasos } = useApp();
     const toast = useToast();
 
-    const [activeTab, setActiveTab] = useState('Todos');
-    const [search, setSearch] = useState('');
+    const [activeTab, setActiveTab] = useState(() => getSavedFilters(activeClasificacion).activeTab ?? 'Todos');
+    const [search, setSearch] = useState(() => getSavedFilters(activeClasificacion).search ?? '');
     const [selected, setSelected] = useState(() => {
         if (!activeClasificacion) return [];
         try {
@@ -263,18 +271,18 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
             return saved ? JSON.parse(saved) : [];
         } catch { return []; }
     });
-    const [page, setPage] = useState(1);
+    const [page, setPage] = useState(() => getSavedFilters(activeClasificacion).page ?? 1);
     const [showFilterMenu, setShowFilterMenu] = useState(false);
     // Filtros por columna PCT
     const [showPctAntiguoMenu, setShowPctAntiguoMenu] = useState(false);
     const [showPctNuevoMenu, setShowPctNuevoMenu] = useState(false);
-    const [pctAntiguoFilter, setPctAntiguoFilter] = useState(null); // e.g. 'USD'
-    const [pctNuevoFilter, setPctNuevoFilter] = useState(null);
+    const [pctAntiguoFilter, setPctAntiguoFilter] = useState(() => getSavedFilters(activeClasificacion).pctAntiguoFilter ?? null); // e.g. 'USD'
+    const [pctNuevoFilter, setPctNuevoFilter] = useState(() => getSavedFilters(activeClasificacion).pctNuevoFilter ?? null);
     // Orden en columna Variación: null | 'asc' | 'desc'
-    const [variacionSort, setVariacionSort] = useState(null);
-    const [filterEstadoIdx, setFilterEstadoIdx] = useState(null);
-    const [filterVariacion, setFilterVariacion] = useState(null); // null, 'Baja', 'Alta'
-    const [filterRevision, setFilterRevision] = useState(null); // null, 'Validado', 'Rechazado', 'Sin revisar'
+    const [variacionSort, setVariacionSort] = useState(() => getSavedFilters(activeClasificacion).variacionSort ?? null);
+    const [filterEstadoIdx, setFilterEstadoIdx] = useState(() => getSavedFilters(activeClasificacion).filterEstadoIdx ?? null);
+    const [filterVariacion, setFilterVariacion] = useState(() => getSavedFilters(activeClasificacion).filterVariacion ?? null); // null, 'Baja', 'Alta'
+    const [filterRevision, setFilterRevision] = useState(() => getSavedFilters(activeClasificacion).filterRevision ?? null); // null, 'Validado', 'Rechazado', 'Sin revisar'
     const [revisiones, setRevisiones] = useState({}); // { [ID]: 'Validado' | 'Rechazado' }
     const [loading, setLoading] = useState(false);
     const [downloading, setDownloading] = useState(null); // 'balanceados', 'no_balanceados', 'sin_datos', null
@@ -324,11 +332,16 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                 setFilterEstadoIdx(obj.filterEstadoIdx ?? null);
                 setFilterVariacion(obj.filterVariacion ?? null);
                 setFilterRevision(obj.filterRevision ?? null);
+                setPctAntiguoFilter(obj.pctAntiguoFilter ?? null);
+                setPctNuevoFilter(obj.pctNuevoFilter ?? null);
+                setVariacionSort(obj.variacionSort ?? null);
                 setPage(obj.page ?? 1);
             } else {
                 setActiveTab('Todos'); setSearch('');
                 setFilterEstadoIdx(null); setFilterVariacion(null);
-                setFilterRevision(null); setPage(1);
+                setFilterRevision(null);
+                setPctAntiguoFilter(null); setPctNuevoFilter(null); setVariacionSort(null);
+                setPage(1);
             }
         } catch { /* ignorar */ }
 
@@ -390,9 +403,10 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
         try {
             localStorage.setItem(`allocations_filtros_${activeClasifRef.current}`, JSON.stringify({
                 activeTab, search, filterEstadoIdx, filterVariacion, filterRevision, page,
+                pctAntiguoFilter, pctNuevoFilter, variacionSort
             }));
         } catch { /* cuota excedida u otro error, ignorar */ }
-    }, [activeTab, search, filterEstadoIdx, filterVariacion, filterRevision, page]);
+    }, [activeTab, search, filterEstadoIdx, filterVariacion, filterRevision, page, pctAntiguoFilter, pctNuevoFilter, variacionSort]);
 
     // Cerrar menús PCT al hacer click fuera
     useEffect(() => {
@@ -483,8 +497,15 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
 
     // Callback para salir del modo guiado (sincroniza los filtros manuales al paso actual)
     const exitWorkflowMode = useCallback((finalizado = false) => {
+        setWorkflowMode(false);
+        setWorkflowSubStepIdx(0);
+        try { localStorage.setItem(`allocations_wf_mode_${activeClasifRef.current}`, 'false'); } catch { }
+        try { localStorage.setItem(`allocations_wf_step_${activeClasifRef.current}`, '0'); } catch { }
+
+        // Si se finalizó desde el último paso de revisión, limpiar todos los filtros visuales por comodidad
         if (finalizado) {
-            setActiveTab('Balanceado');
+            setActiveTab('Todos');
+            setSearch('');
             setFilterEstadoIdx(null);
             setFilterVariacion(null);
             setFilterRevision('Validado');
@@ -498,6 +519,9 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                         filterVariacion: null,
                         filterRevision: 'Validado',
                         page: 1,
+                        pctAntiguoFilter: null,
+                        pctNuevoFilter: null,
+                        variacionSort: null
                     }));
                 } catch {/* ignorar */ }
             }

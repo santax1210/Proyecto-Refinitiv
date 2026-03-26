@@ -315,7 +315,7 @@ function SectionCard({ title, children }) {
 /* ══════════════════════════════════════════════
    PÁGINA PRINCIPAL
 ══════════════════════════════════════════════ */
-export default function VisualizacionPage({ selectedId: propId, onSelect }) {
+export default function VisualizacionPage({ selectedId: propId, onSelect, onNavigate }) {
     const { validationData, activeClasificacion } = useApp();
     const toast = useToast();
     const [selectedId, setSelectedId] = useState(propId ?? null);
@@ -504,29 +504,52 @@ export default function VisualizacionPage({ selectedId: propId, onSelect }) {
                     </div>
                 </div>
 
-                {/* Buscador por ID */}
-                <div style={{
-                    display: 'flex', alignItems: 'center', gap: 8,
-                    padding: '6px 14px', borderRadius: 10,
-                    border: '1px solid #DDE3E6', backgroundColor: '#FFFFFF',
-                    boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
-                    width: 140, transition: 'border-color 0.2s'
-                }}
-                    onFocusCapture={e => e.currentTarget.style.borderColor = TEAL}
-                    onBlurCapture={e => e.currentTarget.style.borderColor = '#DDE3E6'}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9F9F9F" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-                    </svg>
-                    <input
-                        type="text"
-                        placeholder="Buscar ID..."
-                        value={searchId}
-                        onChange={e => handleSearch(e.target.value)}
-                        style={{
-                            border: 'none', outline: 'none', background: 'transparent',
-                            fontSize: 12, fontWeight: 700, color: '#191919', width: '100%'
-                        }}
-                    />
+                {/* Buscador por ID y Volver a tabla */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{
+                        display: 'flex', alignItems: 'center', gap: 8,
+                        padding: '6px 14px', borderRadius: 10,
+                        border: '1px solid #DDE3E6', backgroundColor: '#FFFFFF',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                        width: 140, transition: 'border-color 0.2s'
+                    }}
+                        onFocusCapture={e => e.currentTarget.style.borderColor = TEAL}
+                        onBlurCapture={e => e.currentTarget.style.borderColor = '#DDE3E6'}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9F9F9F" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+                        </svg>
+                        <input
+                            type="text"
+                            placeholder="Buscar ID..."
+                            value={searchId}
+                            onChange={e => handleSearch(e.target.value)}
+                            style={{
+                                border: 'none', outline: 'none', background: 'transparent',
+                                fontSize: 12, fontWeight: 700, color: '#191919', width: '100%'
+                            }}
+                        />
+                    </div>
+                    {onNavigate && (
+                        <button
+                            onClick={() => onNavigate('validacion')}
+                            style={{
+                                display: 'flex', alignItems: 'center', gap: 6,
+                                padding: '6px 14px', borderRadius: 10,
+                                border: '1px solid #DDE3E6', backgroundColor: '#FFFFFF',
+                                color: '#52525B', fontSize: 12, fontWeight: 700,
+                                cursor: 'pointer', transition: 'all 0.15s',
+                                boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#F5F7FA'; e.currentTarget.style.color = '#191919'; e.currentTarget.style.borderColor = '#CBD5E1'; }}
+                            onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#FFFFFF'; e.currentTarget.style.color = '#52525B'; e.currentTarget.style.borderColor = '#DDE3E6'; }}
+                            title="Volver a la tabla de validación"
+                        >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M19 12H5M12 19l-7-7 7-7"/>
+                            </svg>
+                            Volver a tabla
+                        </button>
+                    )}
                 </div>
             </div>
 
