@@ -446,7 +446,8 @@ def _calcular_dominancia_por_instrumento(df_nuevas_merged, umbral=0.9):
 
 def _enriquecer_allocations_con_dominancia(df_nuevas_merged, umbral=0.9):
     """
-    Enriquece el dataframe en formato long agregando columnas de dominancia.
+    Enriquece el dataframe en formato long agregando columnas de dominancia
+    y ASEGURA que la columna 'percentage' esté escalada al 100% total.
     
     Mantiene todas las filas originales (1 fila por instrumento-moneda) y agrega:
     - moneda_nueva
@@ -459,19 +460,38 @@ def _enriquecer_allocations_con_dominancia(df_nuevas_merged, umbral=0.9):
         umbral: Umbral de dominancia (default 0.9 = 90%)
     
     Retorna:
-        DataFrame con todas las filas originales + columnas de dominancia
+        DataFrame con todas las filas originales escaladas + columnas de dominancia
     """
-    # Calcular dominancia por instrumento
+    # 1. Aplicar escalado individual a cada fila (prorrateo)
+    # Esto asegura que la suma de 'percentage' por ID sea siempre 100.0 (si hay datos)
+    df_list = []
+    for _, grupo in df_nuevas_merged.groupby('ID'):
+        grupo_escalado, _ = _escalar_porcentajes(grupo)
+        # Reemplazar percentage con la versión escalada (multiplicada por 100)
+        grupo_escalado['percentage'] = (grupo_escalado['pct_escalado'] * 100).round(4)
+        df_list.append(grupo_escalado)
+    
+    df_final_long = pd.concat(df_list, ignore_index=True)
+
+    # 2. Calcular dominancia por instrumento (resumen)
     df_dominancia = _calcular_dominancia_por_instrumento(df_nuevas_merged, umbral)
     
-    # Hacer merge con el dataframe original para mantener detalle por moneda
+    # 3. Hacer merge con el resumen de dominancia para tener las columnas extra
     df_enriquecido = pd.merge(
-        df_nuevas_merged,
+        df_final_long,
         df_dominancia[['ID', 'moneda_nueva', 'pct_dominancia_nuevo', 'pct_escalado', 'pct_original']],
         on='ID',
         how='left'
     )
     
+    # Eliminar columna auxiliar de escalado
+    if 'pct_escalado_x' in df_enriquecido.columns:
+        df_enriquecido = df_enriquecido.drop(columns=['pct_escalado_x'])
+    if 'pct_escalado_y' in df_enriquecido.columns:
+        df_enriquecido = df_enriquecido.rename(columns={'pct_escalado_y': 'pct_escalado'})
+    elif 'pct_escalado' in df_enriquecido.columns:
+        pass # ya está correcto
+
     return df_enriquecido
 
 

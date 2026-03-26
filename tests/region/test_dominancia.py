@@ -103,30 +103,37 @@ def test_dominancia_y_escalado_region():
         print(f"\n[[OK]] Todos los instrumentos con datos tienen pct_escalado = 100.0")
 
     # ------------------------------------------------------------------ #
-    # TEST 4: CONSISTENCIA suma(percentage) = pct_original
+    # TEST 4: CONSISTENCIA suma(percentage) = 100.0
     # ------------------------------------------------------------------ #
-    print_section("Test 4: Consistencia suma(percentage) vs pct_original")
+    print_section("Test 4: Consistencia suma(percentage) (Debe ser 100.0)")
+    
+    print("\n[...] Verificando que suma(percentage) sea 100.0 (ahora que están escalados)...")
 
     errores = []
     for inst_id in df['ID'].unique()[:50]:
         grupo = df[df['ID'] == inst_id]
         suma_calc = grupo['percentage'].sum()
-        pct_orig  = grupo['pct_original'].iloc[0]
-        if abs(suma_calc - pct_orig) > 0.1:
+        pct_esc  = grupo['pct_escalado'].iloc[0]
+        
+        # Ignorar instrumentos sin datos
+        if pct_esc == 0:
+            continue
+            
+        if abs(suma_calc - 100.0) > 0.1:
             errores.append({
                 'ID': inst_id,
                 'suma': suma_calc,
-                'pct_original': pct_orig,
-                'diff': abs(suma_calc - pct_orig),
+                'pct_escalado': pct_esc,
+                'diff': abs(suma_calc - 100.0),
             })
 
     if errores:
-        print(f"\n[!] ERROR: {len(errores)} inconsistencias:")
+        print(f"\n[!] ERROR: {len(errores)} sumas distintas a 100.0:")
         for item in errores[:3]:
-            print(f"    ID {item['ID']}: suma={item['suma']:.2f}, pct_original={item['pct_original']:.2f}")
+            print(f"    ID {item['ID']}: suma={item['suma']:.2f}, pct_escalado={item['pct_escalado']:.2f}")
         todos_ok = False
     else:
-        print(f"\n[[OK]] Consistencia verificada: suma(percentage) ≈ pct_original")
+        print(f"\n[[OK]] Consistencia verificada: suma(percentage) ≈ 100.0")
 
     # ------------------------------------------------------------------ #
     # TEST 5: LÓGICA DE DOMINANCIA (umbral 90%)

@@ -137,9 +137,9 @@ def test_pct_escalado_suma_100():
     return True
 
 
-def test_pct_original_consistente():
-    """Verifica que pct_original == suma de los porcentajes brutos del instrumento."""
-    print_section('TEST 3: pct_original coincide con suma(percentage)')
+def test_pct_escalado_en_detalles_suma_100():
+    """Verifica que suma(percentage) == pct_escalado (100.0) para todos los instrumentos."""
+    print_section('TEST 3: suma(percentage) coincide con pct_escalado (100.0)')
 
     df_instruments = _df_instruments_base()
     contenido = (
@@ -152,23 +152,27 @@ def test_pct_original_consistente():
     )
     df = _cargar_nuevas(contenido, df_instruments)
 
-    print(df[['ID', 'class', 'percentage', 'pct_original']].to_string(index=False))
+    print(df[['ID', 'class', 'percentage', 'pct_escalado', 'pct_original']].to_string(index=False))
 
     errores = []
     for id_inst in df['ID'].unique():
         grupo = df[df['ID'] == id_inst]
         suma_real = grupo['percentage'].sum()
-        pct_orig = grupo['pct_original'].iloc[0]
-        if abs(suma_real - pct_orig) > 0.1:
-            errores.append({'ID': id_inst, 'suma_real': suma_real, 'pct_original': pct_orig})
+        pct_esc = grupo['pct_escalado'].iloc[0]
+        
+        if pct_esc == 0:
+            continue
+            
+        if abs(suma_real - 100.0) > 0.1:
+            errores.append({'ID': id_inst, 'suma_real': suma_real, 'pct_escalado': pct_esc})
 
     if errores:
         for e in errores:
-            print(f'    [X] ID={e["ID"]}: suma={e["suma_real"]:.2f}, pct_original={e["pct_original"]:.2f}')
-        assert False, f'{len(errores)} inconsistencias entre suma(percentage) y pct_original'
+            print(f'    [X] ID={e["ID"]}: suma={e["suma_real"]:.2f}, pct_escalado={e["pct_escalado"]:.2f}')
+        assert False, f'{len(errores)} inconsistencias entre suma(percentage) y 100.0'
 
-    print('\n    [OK] suma(percentage) == pct_original para todos los instrumentos')
-    print('\n[OK] test_pct_original_consistente PASADO')
+    print('\n    [OK] suma(percentage) == 100.0 para todos los instrumentos')
+    print('\n[OK] test_pct_escalado_en_detalles_suma_100 PASADO')
     return True
 
 
@@ -230,7 +234,7 @@ def test_umbral_con_porcentajes_decimales():
 def main():
     ok1 = test_umbral_dominancia_90()
     ok2 = test_pct_escalado_suma_100()
-    ok3 = test_pct_original_consistente()
+    ok3 = test_pct_escalado_en_detalles_suma_100()
     ok4 = test_exclusion_classif_no_industry()
     ok5 = test_umbral_con_porcentajes_decimales()
     return all([ok1, ok2, ok3, ok4, ok5])

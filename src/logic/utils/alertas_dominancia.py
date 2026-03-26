@@ -44,7 +44,7 @@ def _extraer_clase_de_pct(pct_str):
     if not match:
         return None
     clase = match.group(1).strip()
-    if clase.upper() in ('BALANCEADO', 'BALANCEADA', ''):
+    if clase.upper() in CLASES_ESPECIALES or clase.upper() == '':
         return None
     return clase
 

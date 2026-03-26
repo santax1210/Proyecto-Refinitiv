@@ -150,13 +150,40 @@ def _calcular_dominancia_sector(df_nuevas_merged, umbral=0.9):
 
 
 def _enriquecer_allocations_sector(df_nuevas_merged, umbral=0.9):
+    """
+    Enriquece el DataFrame LONG con columnas de dominancia
+    y ASEGURA que la columna 'percentage' esté escalada al 100% total.
+    """
+    # 1. Aplicar escalado individual a cada fila (prorrateo)
+    df_list = []
+    for _, grupo in df_nuevas_merged.groupby('ID'):
+        grupo_escalado, _ = _escalar_porcentajes_sector(grupo[['class', 'percentage']])
+        # Reemplazar percentage con la versión escalada (multiplicada por 100)
+        # Nota: recuperamos el 'class' original del grupo para mantener consistencia
+        grupo_result = grupo.copy()
+        grupo_result['percentage'] = (grupo_escalado['pct_escalado'] * 100).round(4)
+        df_list.append(grupo_result)
+    
+    df_final_long = pd.concat(df_list, ignore_index=True)
+
+    # 2. Calcular dominancia por instrumento (resumen)
     df_dominancia = _calcular_dominancia_sector(df_nuevas_merged, umbral)
-    return pd.merge(
-        df_nuevas_merged,
+    
+    # 3. Merge con el resumen de dominancia
+    df_enriquecido = pd.merge(
+        df_final_long,
         df_dominancia[['ID', 'sector_nueva', 'pct_dominancia_nueva', 'pct_escalado', 'pct_original']],
         on='ID',
         how='left'
     )
+    
+    # Eliminar columna auxiliar de escalado si quedó duplicada por el merge
+    if 'pct_escalado_x' in df_enriquecido.columns:
+        df_enriquecido = df_enriquecido.drop(columns=['pct_escalado_x'])
+    if 'pct_escalado_y' in df_enriquecido.columns:
+        df_enriquecido = df_enriquecido.rename(columns={'pct_escalado_y': 'pct_escalado'})
+
+    return df_enriquecido
 
 
 def load_allocations_nuevas_sector(df_instruments, nuevas_path, umbral=0.9):

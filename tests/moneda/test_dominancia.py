@@ -91,36 +91,40 @@ def test_dominancia_y_escalado():
     else:
         print(f"\n[[OK]] Todos los instrumentos con datos tienen pct_escalado = 100.0")
     
-    # --- TEST 4: VALIDAR SUMA DE PORCENTAJES ORIGINALES ---
-    print_section("Test 4: Validación de Suma Original vs pct_original")
+    # --- TEST 4: VALIDAR SUMA DE PORCENTAJES ESCALADOS ---
+    print_section("Test 4: Validación de Suma de Porcentajes (Debe ser 100.0)")
     
-    print("\n[...] Verificando consistencia entre suma(percentage) y pct_original...")
+    print("\n[...] Verificando que suma(percentage) sea 100.0 (ahora que están escalados)...")
     
     errores = []
     for instrumento_id in df['ID'].unique()[:50]:
         df_inst = df[df['ID'] == instrumento_id]
         
-        # Sumar porcentajes originales
+        # Sumar porcentajes (ahora escalados)
         suma_calculada = df_inst['percentage'].sum()
-        pct_original_registrado = df_inst['pct_original'].iloc[0]
+        pct_escalado_registrado = df_inst['pct_escalado'].iloc[0]
         
+        # Ignorar instrumentos sin datos
+        if pct_escalado_registrado == 0:
+            continue
+            
         # Tolerancia de 0.1 para diferencias de redondeo
-        if abs(suma_calculada - pct_original_registrado) > 0.1:
+        if abs(suma_calculada - 100.0) > 0.1:
             errores.append({
                 'ID': instrumento_id,
                 'suma_calculada': suma_calculada,
-                'pct_original': pct_original_registrado,
-                'diferencia': abs(suma_calculada - pct_original_registrado)
+                'pct_escalado': pct_escalado_registrado,
+                'diferencia': abs(suma_calculada - 100.0)
             })
     
     if errores:
-        print(f"\n[!] ERROR: {len(errores)} instrumentos con inconsistencias:")
+        print(f"\n[!] ERROR: {len(errores)} instrumentos con sumas distintos a 100.0:")
         for item in errores[:3]:
             print(f"    ID {item['ID']}: suma={item['suma_calculada']:.2f}, "
-                  f"pct_original={item['pct_original']:.2f}, "
+                  f"pct_escalado={item['pct_escalado']:.2f}, "
                   f"diff={item['diferencia']:.2f}")
     else:
-        print(f"\n[[OK]] Consistencia verificada: suma(percentage) = pct_original")
+        print(f"\n[[OK]] Consistencia verificada: suma(percentage) = 100.0")
     
     # --- TEST 5: VALIDAR DOMINANCIA ---
     print_section("Test 5: Validación de Clasificación por Dominancia")
