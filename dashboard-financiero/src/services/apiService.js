@@ -295,10 +295,12 @@ export async function getInstrumentDetail(instrumentId, clasificacion = null) {
  * Descargar un archivo CSV de export
  *
  * @param {String} exportType - Tipo de export: 'balanceados', 'no_balanceados', 'con_cambios', 'sin_datos'
+ * @param {String} clasificacion - 'moneda', 'region', 'sector'
  */
-export async function downloadExport(exportType) {
+export async function downloadExport(exportType, clasificacion = null) {
     try {
-        const response = await fetch(`${API_BASE_URL}/api/download/${exportType}`, {
+        const params = clasificacion ? `?clasificacion=${encodeURIComponent(clasificacion)}` : '';
+        const response = await fetch(`${API_BASE_URL}/api/download/${exportType}${params}`, {
             headers: authHeaders(),
         });
 
@@ -311,7 +313,7 @@ export async function downloadExport(exportType) {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `export_${exportType}.csv`;
+        a.download = `export_${exportType}.xlsx`;
         document.body.appendChild(a);
         a.click();
         window.URL.revokeObjectURL(url);
@@ -329,10 +331,12 @@ export async function downloadExport(exportType) {
  *
  * @param {String} exportType - Tipo de export
  * @param {Array} instrumentIds - Array de IDs de instrumentos
+ * @param {String} clasificacion - 'moneda', 'region', 'sector'
  */
-export async function downloadFilteredExport(exportType, instrumentIds) {
+export async function downloadFilteredExport(exportType, instrumentIds, clasificacion = null) {
     try {
-        const response = await fetch(`${API_BASE_URL}/api/download-filtered/${exportType}`, {
+        const params = clasificacion ? `?clasificacion=${encodeURIComponent(clasificacion)}` : '';
+        const response = await fetch(`${API_BASE_URL}/api/download-filtered/${exportType}${params}`, {
             method: 'POST',
             headers: authHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({ instrument_ids: instrumentIds }),
@@ -347,7 +351,7 @@ export async function downloadFilteredExport(exportType, instrumentIds) {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `export_${exportType}_filtrado.csv`;
+        a.download = `export_${exportType}_filtrado.xlsx`;
         document.body.appendChild(a);
         a.click();
         window.URL.revokeObjectURL(url);

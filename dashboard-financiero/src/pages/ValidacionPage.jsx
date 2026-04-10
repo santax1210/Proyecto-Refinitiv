@@ -312,7 +312,17 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
         () => new Set(completedPasosMap[activeClasificacion] || []),
         [completedPasosMap, activeClasificacion]
     );
-    const rowsPerPage = 15;
+    const [rowsPerPage, setRowsPerPage] = useState(() => {
+        try { const v = parseInt(localStorage.getItem('allocations_rows_per_page'), 10); return [10, 15, 25, 50].includes(v) ? v : 15; } catch { return 15; }
+    });
+    const [showRowsMenu, setShowRowsMenu] = useState(false);
+
+    const handleRowsPerPageChange = (n) => {
+        setRowsPerPage(n);
+        setPage(1);
+        try { localStorage.setItem('allocations_rows_per_page', String(n)); } catch { }
+        setShowRowsMenu(false);
+    };
 
     // Ref siempre actualizado con la clasificación activa — evita que los efectos de
     // persistencia escriban en la clave equivocada al cambiar de clasificación.
@@ -408,16 +418,27 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
         } catch { /* cuota excedida u otro error, ignorar */ }
     }, [activeTab, search, filterEstadoIdx, filterVariacion, filterRevision, page, pctAntiguoFilter, pctNuevoFilter, variacionSort]);
 
-    // Cerrar menús PCT al hacer click fuera
+    // Restaurar filtros de columna al montar el componente (net de seguridad para casos de race condition)
     useEffect(() => {
-        if (!showPctAntiguoMenu && !showPctNuevoMenu) return;
+        const clasif = activeClasifRef.current;
+        if (!clasif) return;
+        const saved = getSavedFilters(clasif);
+        if (saved.pctAntiguoFilter !== undefined) setPctAntiguoFilter(saved.pctAntiguoFilter ?? null);
+        if (saved.pctNuevoFilter !== undefined) setPctNuevoFilter(saved.pctNuevoFilter ?? null);
+        if (saved.variacionSort !== undefined) setVariacionSort(saved.variacionSort ?? null);
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Cerrar menús PCT y filas-por-página al hacer click fuera
+    useEffect(() => {
+        if (!showPctAntiguoMenu && !showPctNuevoMenu && !showRowsMenu) return;
         const handler = () => {
             setShowPctAntiguoMenu(false);
             setShowPctNuevoMenu(false);
+            setShowRowsMenu(false);
         };
         document.addEventListener('mousedown', handler);
         return () => document.removeEventListener('mousedown', handler);
-    }, [showPctAntiguoMenu, showPctNuevoMenu]);
+    }, [showPctAntiguoMenu, showPctNuevoMenu, showRowsMenu]);
 
     // Persistir selección cuando cambia
     useEffect(() => {
@@ -510,8 +531,10 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
             setFilterVariacion(null);
             setFilterRevision('Validado');
             // Guardar inmediatamente en localStorage para persistencia
+            // Los filtros de columna (pct/variacion) se preservan desde el estado actual
             if (activeClasifRef.current) {
                 try {
+                    const colFilters = getSavedFilters(activeClasifRef.current);
                     localStorage.setItem(`allocations_filtros_${activeClasifRef.current}`, JSON.stringify({
                         activeTab: 'Balanceado',
                         search: '',
@@ -519,9 +542,9 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
                         filterVariacion: null,
                         filterRevision: 'Validado',
                         page: 1,
-                        pctAntiguoFilter: null,
-                        pctNuevoFilter: null,
-                        variacionSort: null
+                        pctAntiguoFilter: colFilters.pctAntiguoFilter ?? null,
+                        pctNuevoFilter: colFilters.pctNuevoFilter ?? null,
+                        variacionSort: colFilters.variacionSort ?? null
                     }));
                 } catch {/* ignorar */ }
             }
@@ -637,13 +660,13 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
     const totalPages = Math.ceil(sorted.length / rowsPerPage);
     const paged = sorted.slice((page - 1) * rowsPerPage, page * rowsPerPage);
     const totalGeneral = SAMPLE_DATA.reduce((s, r) => s + r.valor, 0);
-    const allPageSel = paged.length > 0 && paged.every(r => selected.includes(r.id));
+    const allPageSel = paged.length > 0 && paged.every(r => selected.includes(r.ID));
     const selCount = selected.length;
     const filterKey = `${effTab}|${search}|${effEstadoIdx ?? ''}|${effVariacion ?? ''}|${filterRevision ?? ''}|${pctAntiguoFilter ?? ''}|${pctNuevoFilter ?? ''}|${variacionSort ?? ''}|${page}`;
 
     const toggleAll = () => {
-        if (allPageSel) setSelected(s => s.filter(id => !paged.some(r => r.id === id)));
-        else setSelected(s => [...new Set([...s, ...paged.map(r => r.id)])]);
+        if (allPageSel) setSelected(s => s.filter(id => !paged.some(r => r.ID === id)));
+        else setSelected(s => [...new Set([...s, ...paged.map(r => r.ID)])]);
     };
 
     // Toggle selección y validación
@@ -715,9 +738,9 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
             setDownloading(exportType);
             const filteredIds = filtered.map(row => row.ID);
             if (filteredIds.length < SAMPLE_DATA.length) {
-                await downloadFilteredExport(exportType, filteredIds);
+                await downloadFilteredExport(exportType, filteredIds, activeClasificacion);
             } else {
-                await downloadExport(exportType);
+                await downloadExport(exportType, activeClasificacion);
             }
             toast({ message: `Archivo "${exportType.replace(/_/g, ' ')}" descargado correctamente`, type: 'success' });
         } catch (error) {
@@ -1705,14 +1728,32 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
 
                         {/* ── Paginación ── */}
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `14px ${PX}px`, ...borderTop }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#9F9F9F' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#9F9F9F', position: 'relative' }}>
                                 <span>Filas por página:</span>
-                                <button style={{ display: 'flex', alignItems: 'center', gap: 4, fontWeight: 600, color: '#525256', background: 'none', border: 'none', cursor: 'pointer' }}>
+                                <button
+                                    onClick={() => setShowRowsMenu(v => !v)}
+                                    style={{ display: 'flex', alignItems: 'center', gap: 4, fontWeight: 600, color: '#525256', background: 'none', border: 'none', cursor: 'pointer' }}
+                                >
                                     {rowsPerPage}
                                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                        <polyline points="6 9 12 15 18 9" />
+                                        <polyline points={showRowsMenu ? '18 15 12 9 6 15' : '6 9 12 15 18 9'} />
                                     </svg>
                                 </button>
+                                {showRowsMenu && (
+                                    <div onMouseDown={e => e.stopPropagation()} style={{ position: 'absolute', bottom: 'calc(100% + 6px)', left: 0, backgroundColor: '#FFFFFF', border: '1px solid #E8E8E8', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 100, minWidth: 110, overflow: 'hidden' }}>
+                                        {[10, 15, 25, 50].map(option => (
+                                            <button
+                                                key={option}
+                                                onClick={() => handleRowsPerPageChange(option)}
+                                                style={{ display: 'block', width: '100%', padding: '8px 14px', textAlign: 'left', background: rowsPerPage === option ? '#F0F7F6' : 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: rowsPerPage === option ? 600 : 400, color: rowsPerPage === option ? '#299D91' : '#374151' }}
+                                                onMouseEnter={e => { if (rowsPerPage !== option) e.currentTarget.style.backgroundColor = '#F9FAFB'; }}
+                                                onMouseLeave={e => { if (rowsPerPage !== option) e.currentTarget.style.backgroundColor = 'transparent'; }}
+                                            >
+                                                {option} filas
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 16, fontSize: 13, color: '#9F9F9F' }}>
                                 <span>{(page - 1) * rowsPerPage + 1}–{Math.min(page * rowsPerPage, filtered.length)} de {filtered.length}</span>
@@ -1875,3 +1916,5 @@ export default function ValidacionPage({ onNavigate, onSelect }) {
         </div>
     );
 }
+
+

@@ -95,7 +95,9 @@ def generar_export_balanceados_sector(df_final, df_allocations_nuevas_sector, df
         'Clasificacion', 'Industria Anterior', 'Estado', 'pct_original',
     ]
     cols_sector = [c for c in df_export.columns if c not in cols_fijas]
-    return df_export[[c for c in cols_fijas if c in df_export.columns] + cols_sector]
+    df_export = df_export[[c for c in cols_fijas if c in df_export.columns] + cols_sector]
+    df_export.rename(columns={'ID': 'instrument_id'}, inplace=True)
+    return df_export
 
 
 def generar_export_no_balanceados_sector(df_final):
@@ -114,7 +116,9 @@ def generar_export_no_balanceados_sector(df_final):
     df_export['Estado'] = df_export.apply(_calcular_estado_no_balanceados_sector, axis=1)
     df_export['Sobreescribir'] = df_export['Cambio'].apply(lambda x: 'Sí' if x == 'Sí' else 'No')
 
-    return df_export[['ID', 'Instrumento', 'SubIndustria', 'Industria Anterior', 'Estado', 'Sobreescribir']]
+    df_export = df_export[['ID', 'Instrumento', 'SubIndustria', 'Industria Anterior', 'Estado', 'Sobreescribir']]
+    df_export.rename(columns={'ID': 'instrument_id'}, inplace=True)
+    return df_export
 
 
 def generar_export_sin_datos_sector(df_instruments, df_allocations_nuevas_sector):
@@ -142,5 +146,5 @@ def generar_export_sin_datos_sector(df_instruments, df_allocations_nuevas_sector
         return pd.DataFrame(columns=['ID', 'Instrumento'])
 
     df_sin_datos = df_instruments[df_instruments['ID'].isin(ids_sin_datos)][['ID', 'Nombre']].copy()
-    df_sin_datos = df_sin_datos.rename(columns={'Nombre': 'Instrumento'})
+    df_sin_datos = df_sin_datos.rename(columns={'Nombre': 'Instrumento', 'ID': 'instrument_id'})
     return df_sin_datos

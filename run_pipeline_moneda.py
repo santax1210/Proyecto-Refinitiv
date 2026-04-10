@@ -14,6 +14,8 @@ from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from src.logic.utils.export_base1 import convertir_export_a_base1
+
 from src.extractors.moneda.load_instruments import load_df_instruments
 from src.extractors.moneda.load_allocations import load_allocations_nuevas, load_allocations_antiguas
 from src.logic.moneda.clasificacion import ejecutar_pipeline_completo
@@ -115,6 +117,8 @@ def main():
             ('export_sin_datos.csv',      'sin_datos'),
         ]:
             df = resultados['exports'][key]
+            if key == 'balanceados':
+                df = convertir_export_a_base1(df)
             df.to_csv(f'{EXPORTS_DIR}/{nombre}', index=False, sep=';', encoding='latin-1')
             print(f"  [OK] {EXPORTS_DIR}/{nombre} ({len(df)} registros)")
 

@@ -134,6 +134,10 @@ data/raw/moneda/*.csv
 data/raw/sector/*.csv
 data/raw/region/*.csv
 
+# Exports de recuperación (sector)
+data/exports/sector/recuperados/
+data/exports/sector/recuperados/*
+
 # =============================================================================
 # NOTA: El dashboard React (dashboard-financiero/) tiene su propio .gitignore
 # que maneja: node_modules, dist, .vscode específico del frontend, etc.

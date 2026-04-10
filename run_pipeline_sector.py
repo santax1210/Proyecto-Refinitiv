@@ -12,6 +12,7 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
+from src.logic.utils.export_base1 import convertir_export_a_base1
 from src.extractors.sector.load_instruments_sector import load_instruments_sector
 from src.extractors.sector.load_allocations_sector import (
     load_allocations_nuevas_sector,
@@ -85,7 +86,10 @@ def main():
             ('export_con_cambios.csv', 'con_cambios'),
             ('export_sin_datos.csv', 'sin_datos'),
         ]:
-            resultados['exports'][key].to_csv(
+            df_exp = resultados['exports'][key]
+            if key == 'balanceados':
+                df_exp = convertir_export_a_base1(df_exp)
+            df_exp.to_csv(
                 f'{EXPORTS_DIR}/{nombre}', index=False, sep=';', encoding='utf-8'
             )
 

@@ -19,6 +19,9 @@ from datetime import datetime, timezone, timedelta
 import jwt
 from functools import wraps
 from dotenv import load_dotenv
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from src.logic.utils.export_base1 import convertir_export_a_base1
 
 # Cargar variables de entorno desde el archivo .env
 load_dotenv()
@@ -459,7 +462,9 @@ def run_pipeline_background(clasificacion='moneda'):
         resultados['df_antiguas'].to_csv(os.path.join(proc_folder, alloc_antiguas_name), index=False, sep=';', encoding='latin-1')
 
         for key, df_exp in exports.items():
-            df_exp.to_csv(os.path.join(exp_folder, f'export_{key}.csv'), index=False, sep=';', encoding='utf-8')
+            if key == 'balanceados':
+                df_exp = convertir_export_a_base1(df_exp)
+            df_exp.to_excel(os.path.join(exp_folder, f'export_{key}.xlsx'), index=False)
 
         summary = {
             'total_instrumentos': len(df_final),
@@ -589,8 +594,9 @@ def download_export(export_type):
     export_type: balanceados, no_balanceados, con_cambios, sin_datos
     """
     try:
-        _, exp_folder, _ = get_result_paths()
-        export_path = os.path.join(exp_folder, f'export_{export_type}.csv')
+        clasif_param = request.args.get('clasificacion', None)
+        _, exp_folder, _ = get_result_paths(clasif_param)
+        export_path = os.path.join(exp_folder, f'export_{export_type}.xlsx')
         
         if not os.path.exists(export_path):
             return jsonify({
@@ -600,9 +606,9 @@ def download_export(export_type):
         
         return send_file(
             export_path,
-            mimetype='text/csv',
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             as_attachment=True,
-            download_name=f'export_{export_type}.csv'
+            download_name=f'export_{export_type}.xlsx'
         )
         
     except Exception as e:
@@ -783,8 +789,9 @@ def download_filtered_export(export_type):
         id_set = set(map(str, instrument_ids))
         
         # Ruta del archivo export original
-        _, exp_folder, _ = get_result_paths()
-        export_path = os.path.join(exp_folder, f'export_{export_type}.csv')
+        clasif_param = request.args.get('clasificacion', None)
+        _, exp_folder, _ = get_result_paths(clasif_param)
+        export_path = os.path.join(exp_folder, f'export_{export_type}.xlsx')
         
         if not os.path.exists(export_path):
             return jsonify({
@@ -792,35 +799,32 @@ def download_filtered_export(export_type):
                 'message': f'No existe el export: {export_type}'
             }), 404
         
-        # Leer y filtrar el CSV
-        import csv
-        from io import StringIO
-        
-        filtered_rows = []
-        with open(export_path, 'r', encoding='utf-8') as f:
-            reader = csv.reader(f, delimiter=';')
-            header = next(reader)  # Guardar encabezado
-            filtered_rows.append(header)
-            
-            # Filtrar filas por ID
-            for row in reader:
-                if row and row[0] in id_set:  # Primera columna es ID
-                    filtered_rows.append(row)
-        
-        # Crear CSV filtrado en memoria
-        output = StringIO()
-        writer = csv.writer(output, delimiter=';', lineterminator='\n')
-        writer.writerows(filtered_rows)
-        csv_content = output.getvalue()
-        output.close()
-        
-        # Crear respuesta con el CSV filtrado
+        # Leer y filtrar el Excel
+        import pandas as pd
+        from io import BytesIO
+
+        df = pd.read_excel(export_path)
+
+        # Filtrar por instrument_id (primera columna, renombrada)
+        if 'instrument_id' in df.columns:
+            df_filtrado = df[df['instrument_id'].astype(str).isin(id_set)]
+        else:
+            # Fallback: filtrar por primera columna independientemente del nombre
+            primera_col = df.columns[0]
+            df_filtrado = df[df[primera_col].astype(str).isin(id_set)]
+
+        # Escribir Excel filtrado en memoria
+        buffer = BytesIO()
+        df_filtrado.to_excel(buffer, index=False)
+        buffer.seek(0)
+
+        # Crear respuesta con el Excel filtrado
         from flask import Response
         return Response(
-            csv_content,
-            mimetype='text/csv',
+            buffer.getvalue(),
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             headers={
-                'Content-Disposition': f'attachment; filename=export_{export_type}_filtrado.csv'
+                'Content-Disposition': f'attachment; filename=export_{export_type}_filtrado.xlsx'
             }
         )
         

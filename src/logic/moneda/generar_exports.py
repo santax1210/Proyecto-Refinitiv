@@ -205,6 +205,7 @@ def generar_export_balanceados(df_final, df_allocations_nuevas, df_instruments, 
     columnas_finales = [col for col in columnas_fijas if col in df_export.columns] + columnas_monedas
     df_export = df_export[columnas_finales]
     
+    df_export.rename(columns={'ID': 'instrument_id'}, inplace=True)
     return df_export
 
 
@@ -254,6 +255,7 @@ def generar_export_no_balanceados(df_final):
     # 5. Eliminar columna auxiliar Cambio (ya no se necesita en el export)
     df_export = df_export[['ID', 'Instrumento', 'SubMoneda', 'Moneda Anterior', 'Estado', 'Sobreescribir']]
     
+    df_export.rename(columns={'ID': 'instrument_id'}, inplace=True)
     return df_export
 
 
@@ -314,7 +316,7 @@ def generar_export_sin_datos(df_instruments, df_allocations_nuevas):
     
     # 7. Seleccionar y renombrar columnas
     df_export = df_sin_datos[['ID', 'Nombre']].copy()
-    df_export.rename(columns={'Nombre': 'Instrumento'}, inplace=True)
+    df_export.rename(columns={'Nombre': 'Instrumento', 'ID': 'instrument_id'}, inplace=True)
     
     return df_export
 
