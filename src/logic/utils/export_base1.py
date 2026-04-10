@@ -10,7 +10,7 @@ la lógica interna ni la visualización en la UI.
 
 # Columnas fijas del export_balanceados (no son clases, no se tocan)
 COLS_METADATA_EXPORT = {
-    'ID', 'Instrumento', 'Id_ti_valor', 'Id_ti', 'Fecha',
+    'ID', 'instrument_id', 'Instrumento', 'Id_ti_valor', 'Id_ti', 'Fecha',
     'Clasificacion', 'Estado', 'pct_original', 'pct_carga',
     'Industria Anterior', 'Moneda Anterior', 'Region Anterior',
 }
