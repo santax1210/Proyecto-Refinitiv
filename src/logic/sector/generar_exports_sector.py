@@ -78,7 +78,7 @@ def generar_export_balanceados_sector(df_final, df_allocations_nuevas_sector, df
     df_export['Fecha'] = df_export['Sectores:'].apply(
         lambda x: '31-12-2019' if normalizar_estado_sector(x) in ESTADOS_FALTA_ALLOCATION else primer_dia_mes
     )
-    df_export['Clasificacion'] = 'sector'
+    df_export['Clasificacion'] = 'sectores'
     df_export['Estado'] = df_export.apply(_calcular_estado_balanceados_sector, axis=1)
 
     df_export = df_export.rename(columns={
